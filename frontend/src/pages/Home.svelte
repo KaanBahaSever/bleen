@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { HardDrive, Plus, Ellipsis, Folder, Server, TriangleAlert } from '@lucide/svelte';
+  import { HardDrive, Plus, Ellipsis, Folder, Server, TriangleAlert, Lock } from '@lucide/svelte';
   import Mascot from '../lib/ui/Mascot.svelte';
   import Sparkline from '../lib/ui/Sparkline.svelte';
   import Sheet from '../lib/ui/Sheet.svelte';
   import AddSource from '../lib/AddSource.svelte';
+  import UnlockSheet from '../lib/UnlockSheet.svelte';
   import DiskPicker from '../lib/DiskPicker.svelte';
   import { api, backupNow, lang, store, t } from '../lib/store.svelte';
   import { fmtRelative, fmtSize, isZeroTime } from '../lib/i18n';
@@ -14,6 +15,7 @@
   const vault = $derived(st?.vault ?? null);
   let adding = $state(false);
   let picking = $state(false);
+  let unlocking = $state(false);
   let menu = $state('');
 
   const primary = $derived.by(() => {
@@ -21,6 +23,8 @@
     if (!vault) return { label: t('home.btn.chooseDisk'), action: () => (picking = true), disabled: false };
     if (!vault.connected)
       return { label: t('home.btn.plugIn', { label: vault.label || vault.path }), action: () => {}, disabled: true };
+    if (vault.locked)
+      return { label: t('home.btn.unlock', { label: vault.label || vault.path }), action: () => (unlocking = true), disabled: false };
     const needsFirst = sources.some((s) => s.backups === 0);
     return {
       label: needsFirst ? t('home.btn.first') : t('home.btn.changes'),
@@ -69,6 +73,9 @@
             {#if vault.connected}
               <span class="h-2 w-2 rounded-full bg-ok" aria-hidden="true"></span>
             {/if}
+            {#if vault.encrypted}
+              <span class="pill {vault.locked ? 'pill-warn' : 'pill-muted'}"><Lock size={12} />{vault.locked ? t('enc.locked') : t('enc.badge')}</span>
+            {/if}
           </div>
           {#if vault.connected}
             <div class="truncate font-mono text-[12px] text-muted">{vault.path}</div>
@@ -78,6 +85,9 @@
         </div>
         {#if vault.connected}
           <span class="num text-[13px] text-muted">{t('common.free', { size: fmtSize(lang(), vault.free) })}</span>
+        {/if}
+        {#if vault.locked}
+          <button class="btn btn-secondary" onclick={() => (unlocking = true)}>{t('enc.unlock')}</button>
         {/if}
         <button class="btn btn-ghost" onclick={() => (picking = true)}>{t('common.change')}</button>
       </div>
@@ -133,6 +143,9 @@
                   <button role="menuitem" disabled={!vault?.connected || !!store.job} onclick={() => backupNow([s.id])}>
                     {t('home.backupOnly')}
                   </button>
+                  <button role="menuitem" disabled={!vault?.connected || !!store.job || s.backups === 0} onclick={() => backupNow([s.id], true)}>
+                    {t('home.freshFull')}
+                  </button>
                   <button role="menuitem" class="text-bad" onclick={() => api.RemoveSource(s.id)}>{t('common.remove')}</button>
                 </div>
               {/if}
@@ -167,6 +180,10 @@
     <p class="mb-4 text-muted">{t('onb.source.body')}</p>
     <AddSource onadded={() => (adding = false)} />
   </Sheet>
+{/if}
+
+{#if unlocking}
+  <UnlockSheet onclose={() => (unlocking = false)} />
 {/if}
 
 {#if picking}

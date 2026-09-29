@@ -70,9 +70,9 @@ export async function init() {
   applyTheme(s.theme);
 }
 
-export async function backupNow(ids: string[] = []) {
+export async function backupNow(ids: string[] = [], full = false) {
   try {
-    await api.BackupNow(ids);
+    await api.BackupNow(ids, full);
   } catch (e) {
     toast(errText(e));
   }

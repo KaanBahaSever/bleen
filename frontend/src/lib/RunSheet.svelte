@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check, TriangleAlert, X, CircleAlert } from '@lucide/svelte';
+  import { Check, TriangleAlert, X, CircleAlert, Pause, Play } from '@lucide/svelte';
   import Sheet from './ui/Sheet.svelte';
   import Mascot from './ui/Mascot.svelte';
   import ProgressBean from './ui/ProgressBean.svelte';
@@ -42,7 +42,9 @@
           : 'happy'
         : job.phase === 'cancelled' || job.phase === 'awaiting'
           ? 'idle'
-          : 'working',
+          : job.paused
+            ? 'sleeping'
+            : 'working',
   );
 
   const title = $derived.by(() => {
@@ -118,6 +120,7 @@
         {/each}
       </dl>
     {:else if job.phase === 'running'}
+      {#if job.paused}<p class="mb-3 text-[13px] font-semibold text-warn">{t('run.paused')}</p>{/if}
       <ProgressBean value={pct} label={title} />
       <div class="num mt-3 flex justify-between text-[13px] text-muted">
         <span>{t('run.progress', { done: fmtNumber(lang(), p.filesDone), total: fmtNumber(lang(), p.filesTotal) })} · {Math.round(pct)}%</span>
@@ -146,6 +149,7 @@
                 <p class="check"><Check size={16} />{t('run.ok.size', { size: fmtSize(lang(), r.stored) })}</p>
                 {#if r.verified}<p class="check"><Check size={16} />{t('run.ok.verified')}</p>{/if}
                 <p class="check"><Check size={16} />{t('run.ok.catalog')}</p>
+                {#if r.pruned}<p class="check"><Check size={16} />{t('run.ok.pruned', { n: r.pruned })}</p>{/if}
               {:else if r.result === 'nothing'}
                 <p class="check"><Check size={16} />{t('run.nothing', { name: r.source })}</p>
               {:else if r.result === 'cancelled'}
@@ -200,6 +204,13 @@
         {job.plan?.massChange ? t('run.mass.confirm') : t('run.start')}
       </button>
     {:else if !finished}
+      {#if job.kind === 'backup' && (job.phase === 'running' || job.phase === 'scanning')}
+        {#if job.paused}
+          <button class="btn btn-secondary" onclick={() => api.Resume()}><Play size={16} />{t('run.resume')}</button>
+        {:else}
+          <button class="btn btn-secondary" onclick={() => api.Pause()}><Pause size={16} />{t('run.pause')}</button>
+        {/if}
+      {/if}
       <button class="btn btn-ghost" onclick={() => api.Cancel()}>{t('common.cancel')}</button>
     {:else}
       {#if job.kind === 'restore' && job.dest && job.phase === 'done'}

@@ -9,6 +9,9 @@
   let drives = $state<platform.Volume[]>([]);
   let busy = $state(false);
   let error = $state('');
+  let encrypt = $state(false);
+  let pw = $state('');
+  let pw2 = $state('');
 
   onMount(async () => {
     drives = (await api.Drives()) ?? [];
@@ -16,9 +19,11 @@
 
   async function use(dir: string) {
     error = '';
+    if (encrypt && pw.length < 8) return void (error = t('err.E_WEAK_PASSWORD'));
+    if (encrypt && pw !== pw2) return void (error = t('enc.mismatch'));
     busy = true;
     try {
-      await api.UseVaultFolder(dir);
+      await api.UseVaultFolder(dir, encrypt ? pw : '');
       onchosen?.();
     } catch (e) {
       error = errText(e);
@@ -36,6 +41,20 @@
 </script>
 
 <div class="flex flex-col gap-2">
+  <label class="mb-2 flex items-start gap-3 rounded-xl bg-surface-2 px-4 py-3">
+    <input type="checkbox" class="mt-1" bind:checked={encrypt} />
+    <span class="flex-1">
+      <span class="block font-semibold">{t('enc.toggle')}</span>
+      <span class="block text-[12px] text-muted">{t('enc.hint')}</span>
+      {#if encrypt}
+        <span class="mt-3 flex gap-2">
+          <input class="input" type="password" autocomplete="new-password" placeholder={t('enc.password')} aria-label={t('enc.password')} bind:value={pw} />
+          <input class="input" type="password" autocomplete="new-password" placeholder={t('enc.repeat')} aria-label={t('enc.repeat')} bind:value={pw2} />
+        </span>
+        <span class="mt-2 block text-[12px] font-semibold text-warn">{t('enc.warn')}</span>
+      {/if}
+    </span>
+  </label>
   {#each drives as d (d.path)}
     <button class="drive card" disabled={busy} onclick={() => use(d.path)}>
       <span class="icon">

@@ -2,6 +2,7 @@
   import { ChevronRight, Folder, File, RotateCcw, Square, SquareCheck, FolderOpen } from '@lucide/svelte';
   import Mascot from '../lib/ui/Mascot.svelte';
   import Sheet from '../lib/ui/Sheet.svelte';
+  import UnlockSheet from '../lib/UnlockSheet.svelte';
   import { api, errText, lang, store, t, toast } from '../lib/store.svelte';
   import { fmtDate, fmtDay, fmtNumber, fmtSize } from '../lib/i18n';
   import type { app } from '../lib/wailsjs/go/models';
@@ -14,6 +15,7 @@
   let selected = $state<string[]>([]);
   let restoring = $state<{ paths: string[]; dest: string; date: string } | null>(null);
   let error = $state('');
+  let unlocking = $state(false);
 
   const connected = $derived(!!store.state?.vault?.connected);
   const source = $derived(sources.find((s) => s.id === sourceId));
@@ -94,7 +96,13 @@
     {/if}
   </div>
 
-  {#if !connected}
+  {#if store.state?.vault?.locked}
+    <div class="card flex flex-col items-center px-6 py-12 text-center">
+      <Mascot mood="sleeping" size={88} />
+      <p class="mt-4 text-muted">{t('err.E_PASSWORD_REQUIRED')}</p>
+      <button class="btn btn-primary mt-4" onclick={() => (unlocking = true)}>{t('enc.unlock')}</button>
+    </div>
+  {:else if !connected}
     <div class="card flex flex-col items-center px-6 py-12 text-center">
       <Mascot mood="sleeping" size={88} />
       <p class="mt-4 text-muted">{t('hist.noDisk')}</p>
@@ -190,6 +198,10 @@
     {#if error}<p class="mt-2 text-[13px] text-bad">{error}</p>{/if}
   {/if}
 </div>
+
+{#if unlocking}
+  <UnlockSheet onclose={() => (unlocking = false)} />
+{/if}
 
 {#if restoring}
   <Sheet onclose={() => (restoring = null)}>

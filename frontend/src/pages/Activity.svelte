@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { Check, CircleAlert, X, Minus, TriangleAlert } from '@lucide/svelte';
+  import { Check, CircleAlert, X, Minus, TriangleAlert, FileDown } from '@lucide/svelte';
   import Mascot from '../lib/ui/Mascot.svelte';
-  import { api, issueText, errText, lang, store, t } from '../lib/store.svelte';
+  import { api, issueText, errText, lang, store, t, toast } from '../lib/store.svelte';
   import { fmtDate, fmtNumber, fmtSize } from '../lib/i18n';
   import type { app } from '../lib/wailsjs/go/models';
 
@@ -12,6 +12,15 @@
     void store.job?.phase;
     api.Activity().then((r) => (runs = r ?? []));
   });
+
+  async function exportReport() {
+    try {
+      const p = await api.ExportReport(t('act.export'));
+      if (p) toast(t('act.exported'));
+    } catch (e) {
+      toast(errText(e));
+    }
+  }
 
   function title(r: app.RunRecord) {
     const kind = r.kind === 'restore' ? t('act.restore') : r.kind === 'verify' ? t('act.verify') : t('act.backup');
@@ -29,7 +38,12 @@
 </script>
 
 <div class="mx-auto max-w-[880px] px-8 py-8">
-  <h1 class="mb-5 font-display text-[26px]">{t('act.title')}</h1>
+  <div class="mb-5 flex items-center">
+    <h1 class="flex-1 font-display text-[26px]">{t('act.title')}</h1>
+    {#if runs.length}
+      <button class="btn btn-secondary" onclick={exportReport}><FileDown size={16} />{t('act.export')}</button>
+    {/if}
+  </div>
   {#if !runs.length}
     <div class="card flex flex-col items-center px-6 py-12 text-center">
       <Mascot mood="sleeping" size={88} />
