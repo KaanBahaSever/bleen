@@ -17,6 +17,26 @@ tasks:
       VERSION:
         sh: git describe --tags --always --dirty 2>/dev/null || echo dev
 
+  build:legacy:
+    desc: "Build a Windows 7/8.1 edition with the patched Go toolchain (GOROOT_LEGACY=path to XTLS/go-win7)"
+    dir: cmd/bleen
+    env:
+      GOROOT: "{{.GOROOT_LEGACY}}"
+      GOTOOLCHAIN: local
+      PATH: "{{.GOROOT_LEGACY}}/bin{{if eq OS \"windows\"}};{{else}}:{{end}}{{.PATH}}"
+    preconditions:
+      - sh: test -n "{{.GOROOT_LEGACY}}"
+        msg: "Set GOROOT_LEGACY to an unpacked https://github.com/XTLS/go-win7 release"
+    cmds:
+      - wails build -trimpath -o bleen-win7-8.exe -ldflags "-X main.version={{.VERSION}}"
+    vars:
+      GOROOT_LEGACY:
+        sh: echo "$GOROOT_LEGACY"
+      PATH:
+        sh: echo "$PATH"
+      VERSION:
+        sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+
   cli:
     desc: Build the headless bleenctl CLI into bin/
     env:
