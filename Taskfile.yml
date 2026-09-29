@@ -1,0 +1,33 @@
+# https://taskfile.dev — thin wrappers so contributors need one command each.
+version: "3"
+
+tasks:
+  dev:
+    desc: Run the desktop app with hot reload
+    dir: cmd/bleen
+    cmds:
+      - wails dev -reloaddirs ../../internal
+
+  build:
+    desc: Build the desktop app into build/bin
+    dir: cmd/bleen
+    cmds:
+      - wails build -clean -trimpath -ldflags "-X main.version={{.VERSION}}"
+    vars:
+      VERSION:
+        sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+
+  cli:
+    desc: Build the headless bleenctl CLI into bin/
+    env:
+      CGO_ENABLED: "0"
+    cmds:
+      - go build -trimpath -o bin/ ./cmd/bleenctl
+
+  check:
+    desc: Lint and test everything
+    cmds:
+      - gofmt -l . && test -z "$(gofmt -l .)"
+      - go vet ./...
+      - go test -count=1 ./...
+      - npm --prefix frontend run check

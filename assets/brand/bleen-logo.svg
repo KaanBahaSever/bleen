@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 128" role="img" aria-labelledby="title">
+  <title id="title">bleen</title>
+  <style>
+    .word { fill: #1F2328; }
+    @media (prefers-color-scheme: dark) { .word { fill: #ECEEF0; } }
+  </style>
+  <defs>
+    <path id="bean" d="M33 37C41.3 33.2 53.7 41.5 64 41.5C74.3 41.5 86.7 33.2 95 37C103.3 40.8 114 55 114 64C114 73 103.3 85.8 95 91C86.7 96.2 74.3 95 64 95C53.7 95 41.3 96.2 33 91C24.7 85.8 14 73 14 64C14 55 24.7 40.8 33 37Z"/>
+    <clipPath id="bean-clip"><use href="#bean"/></clipPath>
+  </defs>
+  <g transform="rotate(-10 64 64)">
+    <use href="#bean" fill="#6FD3A5"/>
+    <path clip-path="url(#bean-clip)" d="M0 0H66C58 50 72 74 62 128H0Z" fill="#7FB0F4"/>
+    <path d="M25 57C27 50 32 46 39 45" fill="none" stroke="#FFFFFF" stroke-opacity=".6" stroke-width="4.5" stroke-linecap="round"/>
+    <ellipse cx="53" cy="63" rx="3.6" ry="5" fill="#1F2328"/>
+    <ellipse cx="75" cy="63" rx="3.6" ry="5" fill="#1F2328"/>
+  </g>
+  <!-- Wordmark: Nunito ExtraBold, lowercase. Convert to outlines before release. -->
+  <text class="word" x="134" y="88" font-family="Nunito, 'Varela Round', ui-rounded, system-ui, sans-serif" font-weight="800" font-size="72" letter-spacing="-1.5">bleen</text>
+</svg>

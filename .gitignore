@@ -1,0 +1,12 @@
+/bin/
+/dist/
+/build/bin/
+*.exe
+*.test
+*.out
+.DS_Store
+Thumbs.db
+frontend/node_modules/
+frontend/dist/*
+!frontend/dist/.gitkeep
+frontend/package.json.md5

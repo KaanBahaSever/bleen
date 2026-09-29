@@ -1,0 +1,456 @@
+// Turkish and English, written in parallel. Keys are grouped by screen.
+// Sentence case everywhere (no ALL CAPS: avoids the Turkish i/İ trap).
+
+export type Lang = 'tr' | 'en';
+
+const en = {
+  'nav.home': 'Home',
+  'nav.history': 'History',
+  'nav.activity': 'Activity',
+  'nav.settings': 'Settings',
+
+  'common.cancel': 'Cancel',
+  'common.done': 'Done',
+  'common.back': 'Back',
+  'common.next': 'Continue',
+  'common.add': 'Add',
+  'common.remove': 'Remove',
+  'common.browse': 'Browse…',
+  'common.change': 'Change…',
+  'common.openFolder': 'Open folder',
+  'common.files': '{n} files',
+  'common.file': '{n} file',
+  'common.free': '{size} free',
+  'common.retry': 'Try again',
+
+  'onb.welcome.title': 'Hi, I’m bleen.',
+  'onb.welcome.body': 'I keep dated copies of your folders on a disk you own. You click, I copy what changed. Pick a day, and you get that day’s folder back.',
+  'onb.welcome.cta': 'Let’s start',
+  'onb.welcome.promise': 'Nothing runs in the background. Backups happen only when you click.',
+  'onb.source.title': 'What should I look after?',
+  'onb.source.body': 'Pick a folder on this computer, or type a network path like \\\\SERVER\\Share\\Folder.',
+  'onb.vault.title': 'Where should backups go?',
+  'onb.vault.body': 'An external disk you can unplug is safest. I’ll create a “bleen” folder on it.',
+  'onb.vault.other': 'Choose another folder…',
+  'onb.vault.none': 'No external disks found. Plug one in, or choose any folder.',
+  'onb.vault.fat32': 'This disk uses FAT32, so large backups will be split into 3.9 GB parts. exFAT or NTFS avoids that.',
+  'onb.summary.title': 'All set',
+  'onb.summary.body': 'The first backup copies everything. After that, only changes.',
+  'onb.summary.start': 'Create first backup',
+  'onb.summary.later': 'Later',
+
+  'add.title': 'Add a location',
+  'add.placeholder': '\\\\SERVER\\Share\\Folder  or  C:\\Users\\…',
+  'add.checking': 'Checking…',
+  'add.pick': 'Choose a folder to back up',
+
+  'home.disk': 'Backup disk',
+  'home.locations': 'Locations',
+  'home.addLocation': 'Add',
+  'home.noDisk': 'Where should backups go? An external disk you can unplug is safest.',
+  'home.chooseDisk': 'Choose disk',
+  'home.diskMissing': 'Not connected. Plug in {label} to back up.',
+  'home.empty.title': 'Nothing to look after yet.',
+  'home.empty.body': 'Add a folder and bleen will keep dated copies of it.',
+  'home.btn.chooseDisk': 'Choose a backup disk',
+  'home.btn.plugIn': 'Plug in {label}',
+  'home.btn.first': 'Create first backup',
+  'home.btn.changes': 'Back up changes',
+  'home.btn.addFirst': 'Add a location',
+  'home.lastRun': 'Last backup {when}',
+  'home.backupOnly': 'Back up only this',
+  'home.freshFull': 'Start a fresh full backup',
+
+  'src.never': 'Never backed up',
+  'src.upToDate': 'Up to date · {when}',
+  'src.stale': 'Last backup {when}',
+  'src.unreachable': 'Can’t reach it',
+  'src.checking': 'Checking…',
+  'src.issues': '{n} files skipped',
+  'src.backups': '{n} backups',
+
+  'run.scanning': 'Looking for changes…',
+  'run.scanned': '{n} files checked',
+  'run.preflight': 'Ready to back up',
+  'run.full': 'Full backup',
+  'run.incremental': 'Changes since last backup',
+  'run.lastFull': 'Last full backup',
+  'run.lastBackup': 'Last backup',
+  'run.new': 'New files',
+  'run.changed': 'Changed files',
+  'run.deleted': 'Deleted files',
+  'run.total': 'Files',
+  'run.estimate': 'Estimated size',
+  'run.diskFree': 'Space on disk',
+  'run.unreadable': 'Unreadable',
+  'run.start': 'Start',
+  'run.mass.title': 'Unusually many changes',
+  'run.mass.body': '{pct}% of files changed or were deleted. This can mean ransomware or a wrong folder. Check the folder before continuing.',
+  'run.mass.confirm': 'I checked, back up anyway',
+  'run.backingUp': 'Backing up {name}',
+  'run.restoring': 'Restoring {name}',
+  'run.verifyingAll': 'Checking backups',
+  'run.progress': '{done} / {total} files',
+  'run.left': 'about {t} left',
+  'run.verifying': 'Verifying the archive…',
+  'run.saving': 'Saving the catalog…',
+  'run.of': '{i} of {n}',
+  'run.done': 'All done',
+  'run.failed': 'Something went wrong',
+  'run.cancelled': 'Stopped. Earlier backups are untouched.',
+  'run.nothing': '{name}: nothing changed. Your backup is still fresh.',
+  'run.ok.files': '{n} files backed up',
+  'run.ok.size': '{size} archived',
+  'run.ok.verified': 'Archive verified (SHA-256)',
+  'run.ok.catalog': 'Catalog updated',
+  'run.ok.skipped': '{n} files skipped, will retry next time',
+  'run.ok.dedup': '{n} already on disk, stored as references',
+  'run.restored': '{n} files restored',
+  'run.restoredTo': 'to {dest}',
+  'run.allVerified': 'Every file verified (SHA-256)',
+  'run.verifyOk': 'All {n} archives are intact',
+  'run.verifyBad': '{n} archives have problems',
+  'run.openBackup': 'Open backup folder',
+  'run.showIssues': 'Show details',
+
+  'hist.title': 'History',
+  'hist.empty': 'Your first backup will show up here as a dot on the timeline.',
+  'hist.noDisk': 'Connect your backup disk to see its history.',
+  'hist.latest': 'Restore latest state',
+  'hist.asOf': '{files} · {size} as of that moment',
+  'hist.all': 'Restore everything',
+  'hist.selected': 'Restore selected ({n})',
+  'hist.root': 'All files',
+  'hist.full': 'full',
+  'hist.otherPc': 'from {host}',
+  'hist.changedHere': 'changed in this backup',
+  'restore.title': 'Restore',
+  'restore.where': 'Restore to',
+  'restore.hint': 'A new, empty folder is safest. Your current files are never overwritten.',
+  'restore.go': 'Restore',
+  'restore.what.all': 'Everything from {date}',
+  'restore.what.some': '{n} selected items from {date}',
+
+  'act.title': 'Activity',
+  'act.empty': 'Nothing has happened yet, which is fine too.',
+  'act.backup': 'Backup',
+  'act.restore': 'Restore',
+  'act.verify': 'Backup check',
+  'act.nothing': 'nothing changed',
+  'act.failed': 'failed',
+  'act.cancelled': 'stopped',
+
+  'set.title': 'Settings',
+  'set.general': 'General',
+  'set.language': 'Language',
+  'set.theme': 'Theme',
+  'set.theme.system': 'System',
+  'set.theme.light': 'Light',
+  'set.theme.dark': 'Dark',
+  'set.confirm': 'Show a summary before each backup',
+  'set.confirm.hint': 'Unusually large changes always ask first.',
+  'set.locations': 'Locations',
+  'set.disk': 'Backup disk',
+  'set.check': 'Check backups',
+  'set.check.hint': 'Re-reads every archive to catch damage on old disks.',
+  'set.exclude': 'Skip these files',
+  'set.exclude.hint': 'One pattern per line, e.g. *.bak or cache/',
+  'set.exclude.defaults': 'Always skipped',
+  'set.save': 'Save',
+  'set.saved': 'Saved',
+  'set.about': 'About',
+  'set.about.body': 'bleen runs only while this window is open. It installs no background service and sends nothing anywhere.',
+  'set.about.license': 'Open source, Apache-2.0',
+
+  'err.E_SOURCE_UNREACHABLE': 'Can’t reach this folder. Check the path, and that this computer is on the network or VPN.',
+  'err.E_ACCESS_DENIED': 'Windows says you don’t have permission to read this folder.',
+  'err.E_EMPTY_PATH': 'Type a folder path or choose one.',
+  'err.E_SOURCE_IS_VAULT': 'This folder is inside the backup disk folder.',
+  'err.E_VAULT_INSIDE_SOURCE': 'The backup folder can’t be inside a folder that is being backed up.',
+  'err.E_SOURCE_EMPTY': 'The folder looks empty. If the server is disconnected, nothing was recorded. Check it and try again.',
+  'err.E_MASS_CHANGE': 'Unusually many files changed. Check the folder, then confirm.',
+  'err.E_VAULT_FULL': 'The backup disk is full.',
+  'err.E_VAULT_WRITE': 'Couldn’t write to the backup disk. Is it still plugged in?',
+  'err.E_VAULT_LOCKED': 'Another bleen is using this backup disk right now.',
+  'err.E_VAULT_MISSING': 'Choose a backup disk first.',
+  'err.E_VAULT_DISCONNECTED': 'The backup disk isn’t connected.',
+  'err.E_CHECKSUM_MISMATCH': 'The new archive didn’t verify, so it was not kept. Your earlier backups are fine.',
+  'err.E_DEST_NOT_EMPTY': 'That folder isn’t empty. Choose a new or empty folder.',
+  'err.E_NOT_FOUND': 'That backup couldn’t be found.',
+  'err.E_BUSY': 'bleen is already working on something.',
+  'err.E_NO_SOURCES': 'Add a location first.',
+  'err.E_FILE_LOCKED': 'In use by another program',
+  'err.E_FILE_UNSTABLE': 'Kept changing while being read',
+  'err.E_CLOUD_PLACEHOLDER': 'Online-only cloud file, skipped',
+  'err.E_READ_FAILED': 'Couldn’t be read',
+  'err.E_RENAMED': 'Renamed (name not allowed here)',
+  'err.E_UNKNOWN': 'Unexpected error.',
+};
+
+type Dict = typeof en;
+export type Key = keyof Dict;
+
+const tr: Dict = {
+  'nav.home': 'Ana sayfa',
+  'nav.history': 'Geçmiş',
+  'nav.activity': 'Etkinlik',
+  'nav.settings': 'Ayarlar',
+
+  'common.cancel': 'Vazgeç',
+  'common.done': 'Tamam',
+  'common.back': 'Geri',
+  'common.next': 'Devam',
+  'common.add': 'Ekle',
+  'common.remove': 'Kaldır',
+  'common.browse': 'Gözat…',
+  'common.change': 'Değiştir…',
+  'common.openFolder': 'Klasörü aç',
+  'common.files': '{n} dosya',
+  'common.file': '{n} dosya',
+  'common.free': '{size} boş',
+  'common.retry': 'Tekrar dene',
+
+  'onb.welcome.title': 'Merhaba, ben bleen.',
+  'onb.welcome.body': 'Klasörlerinin tarihli kopyalarını senin diskinde saklarım. Sen tıklarsın, ben değişenleri kopyalarım. Bir gün seçersin, o günkü klasörün geri gelir.',
+  'onb.welcome.cta': 'Başlayalım',
+  'onb.welcome.promise': 'Arka planda hiçbir şey çalışmaz. Yedek yalnızca sen tıklayınca alınır.',
+  'onb.source.title': 'Neyi koruyayım?',
+  'onb.source.body': 'Bu bilgisayardan bir klasör seç ya da \\\\SUNUCU\\Paylaşım\\Klasör gibi bir ağ yolu yaz.',
+  'onb.vault.title': 'Yedekler nereye gitsin?',
+  'onb.vault.body': 'Çıkarılabilen harici bir disk en güvenlisi. İçinde bir “bleen” klasörü oluşturacağım.',
+  'onb.vault.other': 'Başka bir klasör seç…',
+  'onb.vault.none': 'Harici disk bulunamadı. Bir disk tak ya da herhangi bir klasör seç.',
+  'onb.vault.fat32': 'Bu disk FAT32 kullanıyor; büyük yedekler 3,9 GB’lık parçalara bölünecek. exFAT veya NTFS bunu önler.',
+  'onb.summary.title': 'Her şey hazır',
+  'onb.summary.body': 'İlk yedek her şeyi kopyalar. Sonrasında yalnızca değişenleri.',
+  'onb.summary.start': 'İlk yedeği al',
+  'onb.summary.later': 'Sonra',
+
+  'add.title': 'Konum ekle',
+  'add.placeholder': '\\\\SUNUCU\\Paylaşım\\Klasör  veya  C:\\Users\\…',
+  'add.checking': 'Kontrol ediliyor…',
+  'add.pick': 'Yedeklenecek klasörü seç',
+
+  'home.disk': 'Yedek diski',
+  'home.locations': 'Konumlar',
+  'home.addLocation': 'Ekle',
+  'home.noDisk': 'Yedekler nereye gitsin? Çıkarılabilen harici bir disk en güvenlisi.',
+  'home.chooseDisk': 'Disk seç',
+  'home.diskMissing': 'Bağlı değil. Yedeklemek için {label} diskini tak.',
+  'home.empty.title': 'Henüz korunacak bir şey yok.',
+  'home.empty.body': 'Bir klasör ekle, bleen onun tarihli kopyalarını saklasın.',
+  'home.btn.chooseDisk': 'Yedek diski seç',
+  'home.btn.plugIn': '{label} diskini tak',
+  'home.btn.first': 'İlk yedeği al',
+  'home.btn.changes': 'Değişiklikleri yedekle',
+  'home.btn.addFirst': 'Konum ekle',
+  'home.lastRun': 'Son yedek {when}',
+  'home.backupOnly': 'Yalnızca bunu yedekle',
+  'home.freshFull': 'Yeni bir tam yedek başlat',
+
+  'src.never': 'Henüz yedeklenmedi',
+  'src.upToDate': 'Güncel · {when}',
+  'src.stale': 'Son yedek {when}',
+  'src.unreachable': 'Ulaşılamıyor',
+  'src.checking': 'Kontrol ediliyor…',
+  'src.issues': '{n} dosya atlandı',
+  'src.backups': '{n} yedek',
+
+  'run.scanning': 'Değişiklikler aranıyor…',
+  'run.scanned': '{n} dosya kontrol edildi',
+  'run.preflight': 'Yedeklemeye hazır',
+  'run.full': 'Tam yedek',
+  'run.incremental': 'Son yedekten bu yana değişenler',
+  'run.lastFull': 'Son tam yedek',
+  'run.lastBackup': 'Son yedek',
+  'run.new': 'Yeni dosya',
+  'run.changed': 'Değişen dosya',
+  'run.deleted': 'Silinen dosya',
+  'run.total': 'Dosya',
+  'run.estimate': 'Tahmini boyut',
+  'run.diskFree': 'Diskte boş alan',
+  'run.unreadable': 'Okunamayan',
+  'run.start': 'Başlat',
+  'run.mass.title': 'Alışılmadık sayıda değişiklik',
+  'run.mass.body': 'Dosyaların %{pct}’i değişmiş ya da silinmiş. Bu bir fidye yazılımı ya da yanlış klasör olabilir. Devam etmeden önce klasörü kontrol et.',
+  'run.mass.confirm': 'Kontrol ettim, yine de yedekle',
+  'run.backingUp': '{name} yedekleniyor',
+  'run.restoring': '{name} geri yükleniyor',
+  'run.verifyingAll': 'Yedekler kontrol ediliyor',
+  'run.progress': '{done} / {total} dosya',
+  'run.left': 'yaklaşık {t} kaldı',
+  'run.verifying': 'Arşiv doğrulanıyor…',
+  'run.saving': 'Katalog kaydediliyor…',
+  'run.of': '{i} / {n}',
+  'run.done': 'Tamamlandı',
+  'run.failed': 'Bir şeyler ters gitti',
+  'run.cancelled': 'Durduruldu. Önceki yedeklere dokunulmadı.',
+  'run.nothing': '{name}: değişiklik yok. Yedeğin hâlâ taze.',
+  'run.ok.files': '{n} dosya yedeklendi',
+  'run.ok.size': '{size} arşivlendi',
+  'run.ok.verified': 'Arşiv doğrulandı (SHA-256)',
+  'run.ok.catalog': 'Katalog güncellendi',
+  'run.ok.skipped': '{n} dosya atlandı, bir dahakine tekrar denenecek',
+  'run.ok.dedup': '{n} tanesi diskte zaten vardı, referans olarak kaydedildi',
+  'run.restored': '{n} dosya geri yüklendi',
+  'run.restoredTo': 'hedef: {dest}',
+  'run.allVerified': 'Her dosya doğrulandı (SHA-256)',
+  'run.verifyOk': '{n} arşivin tamamı sağlam',
+  'run.verifyBad': '{n} arşivde sorun var',
+  'run.openBackup': 'Yedek klasörünü aç',
+  'run.showIssues': 'Ayrıntıları göster',
+
+  'hist.title': 'Geçmiş',
+  'hist.empty': 'İlk yedeğin burada zaman çizelgesinde bir nokta olarak görünecek.',
+  'hist.noDisk': 'Geçmişi görmek için yedek diskini bağla.',
+  'hist.latest': 'Son durumu geri yükle',
+  'hist.asOf': 'O anda {files} · {size}',
+  'hist.all': 'Hepsini geri yükle',
+  'hist.selected': 'Seçilenleri geri yükle ({n})',
+  'hist.root': 'Tüm dosyalar',
+  'hist.full': 'tam',
+  'hist.otherPc': '{host} bilgisayarından',
+  'hist.changedHere': 'bu yedekte değişti',
+  'restore.title': 'Geri yükle',
+  'restore.where': 'Nereye',
+  'restore.hint': 'Yeni ve boş bir klasör en güvenlisi. Mevcut dosyalarının üzerine asla yazılmaz.',
+  'restore.go': 'Geri yükle',
+  'restore.what.all': '{date} tarihindeki her şey',
+  'restore.what.some': '{date} tarihinden seçilen {n} öğe',
+
+  'act.title': 'Etkinlik',
+  'act.empty': 'Henüz bir şey olmadı, bu da gayet normal.',
+  'act.backup': 'Yedek',
+  'act.restore': 'Geri yükleme',
+  'act.verify': 'Yedek kontrolü',
+  'act.nothing': 'değişiklik yok',
+  'act.failed': 'başarısız',
+  'act.cancelled': 'durduruldu',
+
+  'set.title': 'Ayarlar',
+  'set.general': 'Genel',
+  'set.language': 'Dil',
+  'set.theme': 'Tema',
+  'set.theme.system': 'Sistem',
+  'set.theme.light': 'Açık',
+  'set.theme.dark': 'Koyu',
+  'set.confirm': 'Her yedekten önce özet göster',
+  'set.confirm.hint': 'Alışılmadık büyüklükteki değişikliklerde her zaman sorulur.',
+  'set.locations': 'Konumlar',
+  'set.disk': 'Yedek diski',
+  'set.check': 'Yedekleri kontrol et',
+  'set.check.hint': 'Eski disklerdeki bozulmaları yakalamak için her arşivi yeniden okur.',
+  'set.exclude': 'Bu dosyaları atla',
+  'set.exclude.hint': 'Her satıra bir kalıp, ör. *.bak veya cache/',
+  'set.exclude.defaults': 'Her zaman atlananlar',
+  'set.save': 'Kaydet',
+  'set.saved': 'Kaydedildi',
+  'set.about': 'Hakkında',
+  'set.about.body': 'bleen yalnızca bu pencere açıkken çalışır. Arka plan servisi kurmaz ve hiçbir yere veri göndermez.',
+  'set.about.license': 'Açık kaynak, Apache-2.0',
+
+  'err.E_SOURCE_UNREACHABLE': 'Bu klasöre ulaşılamıyor. Yolu ve bilgisayarın ağa ya da VPN’e bağlı olduğunu kontrol et.',
+  'err.E_ACCESS_DENIED': 'Windows bu klasörü okuma iznin olmadığını söylüyor.',
+  'err.E_EMPTY_PATH': 'Bir klasör yolu yaz ya da seç.',
+  'err.E_SOURCE_IS_VAULT': 'Bu klasör yedek diski klasörünün içinde.',
+  'err.E_VAULT_INSIDE_SOURCE': 'Yedek klasörü, yedeklenen bir klasörün içinde olamaz.',
+  'err.E_SOURCE_EMPTY': 'Klasör boş görünüyor. Sunucu bağlantısı koptuysa hiçbir şey kaydedilmedi. Kontrol edip tekrar dene.',
+  'err.E_MASS_CHANGE': 'Alışılmadık sayıda dosya değişmiş. Klasörü kontrol edip onayla.',
+  'err.E_VAULT_FULL': 'Yedek diski dolu.',
+  'err.E_VAULT_WRITE': 'Yedek diskine yazılamadı. Disk hâlâ takılı mı?',
+  'err.E_VAULT_LOCKED': 'Şu anda başka bir bleen bu yedek diskini kullanıyor.',
+  'err.E_VAULT_MISSING': 'Önce bir yedek diski seç.',
+  'err.E_VAULT_DISCONNECTED': 'Yedek diski bağlı değil.',
+  'err.E_CHECKSUM_MISMATCH': 'Yeni arşiv doğrulanamadı, bu yüzden saklanmadı. Önceki yedeklerin sağlam.',
+  'err.E_DEST_NOT_EMPTY': 'Bu klasör boş değil. Yeni ya da boş bir klasör seç.',
+  'err.E_NOT_FOUND': 'Bu yedek bulunamadı.',
+  'err.E_BUSY': 'bleen şu anda başka bir iş yapıyor.',
+  'err.E_NO_SOURCES': 'Önce bir konum ekle.',
+  'err.E_FILE_LOCKED': 'Başka bir program kullanıyor',
+  'err.E_FILE_UNSTABLE': 'Okunurken değişmeye devam etti',
+  'err.E_CLOUD_PLACEHOLDER': 'Yalnızca çevrim içi bulut dosyası, atlandı',
+  'err.E_READ_FAILED': 'Okunamadı',
+  'err.E_RENAMED': 'Yeniden adlandırıldı (bu ad burada kullanılamaz)',
+  'err.E_UNKNOWN': 'Beklenmeyen bir hata oluştu.',
+};
+
+const dicts: Record<Lang, Dict> = { en, tr };
+
+export function translate(lang: Lang, key: Key, vars: Record<string, string | number> = {}): string {
+  let s: string = dicts[lang][key] ?? en[key] ?? key;
+  for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, String(v));
+  return s;
+}
+
+export function hasKey(key: string): key is Key {
+  return key in en;
+}
+
+export function resolveLang(setting: string): Lang {
+  if (setting === 'tr' || setting === 'en') return setting;
+  return navigator.language.toLowerCase().startsWith('tr') ? 'tr' : 'en';
+}
+
+const locales: Record<Lang, string> = { tr: 'tr-TR', en: 'en-US' };
+
+export function fmtNumber(lang: Lang, n: number): string {
+  return new Intl.NumberFormat(locales[lang]).format(n);
+}
+
+export function fmtSize(lang: Lang, bytes: number): string {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let v = bytes;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  const digits = i === 0 || v >= 100 ? 0 : 1;
+  return new Intl.NumberFormat(locales[lang], { maximumFractionDigits: digits }).format(v) + ' ' + units[i];
+}
+
+export function fmtDate(lang: Lang, iso: string | Date, withTime = true): string {
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  return new Intl.DateTimeFormat(locales[lang], {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    ...(withTime ? { hour: '2-digit', minute: '2-digit' } : {}),
+  }).format(d);
+}
+
+export function fmtDay(lang: Lang, iso: string): { day: string; month: string; time: string; weekday: string } {
+  const d = new Date(iso);
+  const L = locales[lang];
+  return {
+    day: new Intl.DateTimeFormat(L, { day: 'numeric' }).format(d),
+    month: new Intl.DateTimeFormat(L, { month: 'short' }).format(d),
+    time: new Intl.DateTimeFormat(L, { hour: '2-digit', minute: '2-digit' }).format(d),
+    weekday: new Intl.DateTimeFormat(L, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(d),
+  };
+}
+
+export function fmtRelative(lang: Lang, iso: string): string {
+  const d = new Date(iso).getTime();
+  const diff = (d - Date.now()) / 1000;
+  const rtf = new Intl.RelativeTimeFormat(locales[lang], { numeric: 'auto' });
+  const abs = Math.abs(diff);
+  if (abs < 60) return rtf.format(0, 'second');
+  if (abs < 3600) return rtf.format(Math.round(diff / 60), 'minute');
+  if (abs < 86400) return rtf.format(Math.round(diff / 3600), 'hour');
+  if (abs < 86400 * 30) return rtf.format(Math.round(diff / 86400), 'day');
+  return fmtDate(lang, iso, false);
+}
+
+export function fmtDuration(lang: Lang, seconds: number): string {
+  const s = Math.max(1, Math.round(seconds));
+  if (s < 60) return lang === 'tr' ? `${s} sn` : `${s}s`;
+  const m = Math.round(s / 60);
+  if (m < 60) return lang === 'tr' ? `${m} dk` : `${m} min`;
+  const h = Math.floor(m / 60);
+  return lang === 'tr' ? `${h} sa ${m % 60} dk` : `${h}h ${m % 60}m`;
+}
+
+export function isZeroTime(iso: string | undefined | null): boolean {
+  return !iso || iso.startsWith('0001-01-01');
+}
