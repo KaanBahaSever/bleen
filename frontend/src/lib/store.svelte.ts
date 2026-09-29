@@ -67,6 +67,8 @@ export async function init() {
   store.state = s;
   store.job = s.job ?? null;
   store.onboardingDone = (s.sources ?? []).length > 0 && !!s.vault;
+  const route = new URLSearchParams(location.search).get('route');
+  if (import.meta.env.DEV && route) store.route = route as Route;
   applyTheme(s.theme);
 }
 

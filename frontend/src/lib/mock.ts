@@ -7,7 +7,15 @@ type Cb = (data: any) => void;
 const listeners = new Map<string, Set<Cb>>();
 const emit = (name: string, data: any) => listeners.get(name)?.forEach((cb) => cb(structuredClone(data)));
 
-const scene = new URLSearchParams(location.search).get('scene') ?? 'home';
+const params = new URLSearchParams(location.search);
+const scene = params.get('scene') ?? 'home';
+const freeze = params.has('freeze'); // stop the fake backup at 62% for screenshots
+if (params.has('still')) {
+  // Screenshots: headless browsers don't advance CSS animations under virtual time.
+  const st = document.createElement('style');
+  st.textContent = '*,*::before,*::after{animation:none!important;transition:none!important}';
+  document.head.appendChild(st);
+}
 const lang = new URLSearchParams(location.search).get('lang') ?? 'tr';
 const day = (n: number, h = 18, m = 0) => {
   const d = new Date();
@@ -97,6 +105,7 @@ async function progress() {
   for (let i = 0; i <= total; i += 7) {
     if (!state.job) return;
     while (j.paused) await new Promise((r) => setTimeout(r, 100));
+    if (freeze && i >= total * 0.62) return;
     j.progress = { filesDone: i, filesTotal: total, bytesDone: (i / total) * 460e6, bytesTotal: 460e6, current: files[i % files.length] };
     emit('job', j);
     await new Promise((r) => setTimeout(r, 60));
