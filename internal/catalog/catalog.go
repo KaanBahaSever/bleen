@@ -432,6 +432,85 @@ func (c *DB) Issues(snapshotID int64) ([]archive.Issue, error) {
 	return out, rows.Err()
 }
 
+// Generation summarizes one full backup and its incrementals.
+type Generation struct {
+	ID        int64
+	Number    int
+	Snapshots int
+	Bytes     int64
+	FirstAt   time.Time
+	LastAt    time.Time
+}
+
+// Generations lists a source's generations, oldest first.
+func (c *DB) Generations(sourceID int64) ([]Generation, error) {
+	rows, err := c.db.Query(`SELECT g.id, g.number, COUNT(s.id), COALESCE(SUM(s.bytes_stored), 0),
+		COALESCE(MIN(s.started_at), 0), COALESCE(MAX(s.finished_at), 0)
+		FROM generations g LEFT JOIN snapshots s ON s.generation_id = g.id
+		WHERE g.source_id = ? GROUP BY g.id ORDER BY g.number`, sourceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Generation
+	for rows.Next() {
+		var g Generation
+		var first, last int64
+		if err := rows.Scan(&g.ID, &g.Number, &g.Snapshots, &g.Bytes, &first, &last); err != nil {
+			return nil, err
+		}
+		g.FirstAt, g.LastAt = time.UnixMilli(first), time.UnixMilli(last)
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
+// DeleteGeneration forgets a generation and returns the vault-relative
+// paths of its archives, which the caller deletes afterwards. References
+// never cross generations, so no other snapshot depends on these archives.
+func (c *DB) DeleteGeneration(generationID int64) (archives []string, err error) {
+	rows, err := c.db.Query(`SELECT src.folder || '/' || a.filename FROM archives a
+		JOIN snapshots s ON s.id = a.snapshot_id JOIN sources src ON src.id = a.source_id
+		WHERE s.generation_id = ?`, generationID)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var rel string
+		if err := rows.Scan(&rel); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		archives = append(archives, rel)
+	}
+	rows.Close()
+	tx, err := c.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+	for _, q := range []string{
+		`DELETE FROM file_versions WHERE generation_id = ?`,
+		`DELETE FROM file_issues WHERE snapshot_id IN (SELECT id FROM snapshots WHERE generation_id = ?)`,
+		`DELETE FROM archives WHERE snapshot_id IN (SELECT id FROM snapshots WHERE generation_id = ?)`,
+		`DELETE FROM snapshots WHERE generation_id = ?`,
+		`DELETE FROM generations WHERE id = ?`,
+	} {
+		if _, err = tx.Exec(q, generationID); err != nil {
+			return nil, err
+		}
+	}
+	if _, err = tx.Exec(`INSERT INTO meta(key, value) VALUES('revision', '1')
+		ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + 1`); err != nil {
+		return nil, err
+	}
+	return archives, tx.Commit()
+}
+
 // ApplySnapshot records one snapshot from its archive manifests in a single
 // transaction. folder is the source's folder inside the vault. It is used for
 // normal commits, crash recovery and full catalog rebuilds alike.

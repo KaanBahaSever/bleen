@@ -22,10 +22,14 @@ import (
 )
 
 type BackupOptions struct {
-	Name     string // display name for a source seen for the first time
-	Full     bool   // start a new generation even if one exists
-	Readers  int    // concurrent file reads (default 4)
-	Progress Progress
+	Name string // display name for a source seen for the first time
+	Full bool   // start a new generation even if one exists
+	// AutoFullEvery starts a new generation once the current one has this
+	// many backups, keeping restore chains short (0 = never).
+	AutoFullEvery int
+	Readers       int   // concurrent file reads (default 4)
+	Gate          *Gate // optional: pause/resume between files
+	Progress      Progress
 
 	// Confirm is called with the preflight plan; returning false cancels.
 	// When nil, the run proceeds unless the mass-change guard trips and
@@ -108,7 +112,7 @@ func Backup(ctx context.Context, v *vault.Vault, src *source.LocalFS, opt Backup
 	plan := &Plan{SourceName: info.Name, Origin: origin, Kind: "full"}
 	if latest != nil {
 		plan.LastBackup = latest.FinishedAt
-		if opt.Full {
+		if opt.Full || (opt.AutoFullEvery > 0 && latest.Seq+1 >= opt.AutoFullEvery) {
 			snap.Generation = latest.Generation + 1
 		} else {
 			snap.Kind, plan.Kind = "incremental", "incremental"
@@ -453,6 +457,7 @@ func readOne(ctx context.Context, src *source.LocalFS, t task, opt BackupOptions
 		return result{t: t, issue: &archive.Issue{Path: t.e.Path, Code: code, Message: err.Error()}}
 	}
 	locked, unstable := 0, 0
+	opt.Gate.Wait(ctx)
 	for {
 		if ctx.Err() != nil {
 			return fail(ECancelled, ctx.Err())

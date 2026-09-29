@@ -473,3 +473,56 @@ func TestSafeJoin(t *testing.T) {
 		t.Errorf("good path rejected: %v %v", p, err)
 	}
 }
+
+func TestAutoFullAndPrune(t *testing.T) {
+	v := newVault(t)
+	s := &sim{t: t, rnd: rand.New(rand.NewPCG(11, 11)), dir: filepath.Join(t.TempDir(), "src")}
+	s.write("a.txt", []byte("v0"))
+	src := source.NewLocal(s.dir, nil)
+	var truth []tree
+	for day := 0; day < 7; day++ {
+		s.day = day
+		s.write("a.txt", []byte(fmt.Sprint("v", day)))
+		opt := testOpts(day)
+		opt.AutoFullEvery = 3 // full, incr, incr, full, incr, incr, full
+		rep, err := Backup(context.Background(), v, src, opt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := map[bool]string{true: "full", false: "incremental"}[day%3 == 0]; rep.Plan.Kind != want {
+			t.Fatalf("day %d: kind %s, want %s", day, rep.Plan.Kind, want)
+		}
+		truth = append(truth, readTree(t, s.dir))
+	}
+	srcs, _ := v.Catalog.Sources()
+	pr, err := Prune(v, &srcs[0], 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pr.Generations != 1 || pr.Archives != 3 {
+		t.Fatalf("prune: %+v, want 1 generation / 3 archives", pr)
+	}
+	restoreAll(t, v, truth[3:]) // the last two generations still restore exactly
+	zips, _ := filepath.Glob(filepath.Join(v.Root, "src", "*.zip"))
+	if len(zips) != 4 {
+		t.Fatalf("expected 4 archives left on disk, got %d", len(zips))
+	}
+}
+
+func TestGatePausesBetweenFiles(t *testing.T) {
+	var g Gate
+	g.Pause()
+	done := make(chan struct{})
+	go func() { g.Wait(context.Background()); close(done) }()
+	select {
+	case <-done:
+		t.Fatal("Wait returned while paused")
+	case <-time.After(50 * time.Millisecond):
+	}
+	g.Resume()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Wait did not return after Resume")
+	}
+}
