@@ -8,8 +8,9 @@
 - Plain ZIP files you can open without bleen
 - Works with network folders like `\\SERVER\Root\_proje`
 - Restore any day in one step
+- Optional password encryption
 
-> Early development (v0.1). Windows first; macOS and Linux builds are in progress.
+**[Website](https://kaanbahasever.github.io/bleen/) · [Download the beta](https://github.com/kaanbahasever/bleen/releases)** · Windows 10/11 and 7/8.1
 
 **Desktop app** (Go 1.26+, Node 22+, [Wails v2 CLI](https://wails.io)):
 

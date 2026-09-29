@@ -1529,6 +1529,8 @@ bleenctl restore --source _proje --at 2026-09-27 --to 'D:\Restore\Proje'
 
 ---
 
+**Status (2026-09-29).** `v0.2.0-beta.1` ships M1, v0.1 and most of v0.2 to v0.5: retention and automatic full backups, age encryption, disk rotation, pause/resume, HTML reports, and the opt-in scheduled backup (Windows Task Scheduler). A Windows 7/8.1 edition is built with the patched Go toolchain from XTLS/go-win7. Not yet done: macOS/Linux desktop packages, native SMB, VSS, zstd, tray, code signing.
+
 ## 12. Open-source readiness
 
 - **License: Apache-2.0.** Permissive, with an explicit patent grant and friendly to contributors and packagers. Brand assets are covered separately by a short trademark policy in `assets/brand/README.md`: forks are fine, but a fork must not pretend to be bleen.
