@@ -10,8 +10,8 @@ export function AddSource(arg1) {
   return window['go']['ui']['Bridge']['AddSource'](arg1);
 }
 
-export function BackupNow(arg1) {
-  return window['go']['ui']['Bridge']['BackupNow'](arg1);
+export function BackupNow(arg1, arg2) {
+  return window['go']['ui']['Bridge']['BackupNow'](arg1, arg2);
 }
 
 export function Browse(arg1, arg2, arg3) {
@@ -42,6 +42,14 @@ export function Drives() {
   return window['go']['ui']['Bridge']['Drives']();
 }
 
+export function ExportReport(arg1) {
+  return window['go']['ui']['Bridge']['ExportReport'](arg1);
+}
+
+export function ForgetVault(arg1) {
+  return window['go']['ui']['Bridge']['ForgetVault'](arg1);
+}
+
 export function GetState() {
   return window['go']['ui']['Bridge']['GetState']();
 }
@@ -50,12 +58,20 @@ export function ListBackups() {
   return window['go']['ui']['Bridge']['ListBackups']();
 }
 
+export function Lock() {
+  return window['go']['ui']['Bridge']['Lock']();
+}
+
 export function OpenFolder(arg1) {
   return window['go']['ui']['Bridge']['OpenFolder'](arg1);
 }
 
 export function OpenURL(arg1) {
   return window['go']['ui']['Bridge']['OpenURL'](arg1);
+}
+
+export function Pause() {
+  return window['go']['ui']['Bridge']['Pause']();
 }
 
 export function RemoveSource(arg1) {
@@ -70,6 +86,14 @@ export function Restore(arg1, arg2, arg3, arg4) {
   return window['go']['ui']['Bridge']['Restore'](arg1, arg2, arg3, arg4);
 }
 
+export function Resume() {
+  return window['go']['ui']['Bridge']['Resume']();
+}
+
+export function SetAutomation(arg1, arg2) {
+  return window['go']['ui']['Bridge']['SetAutomation'](arg1, arg2);
+}
+
 export function SetConfirmBeforeRun(arg1) {
   return window['go']['ui']['Bridge']['SetConfirmBeforeRun'](arg1);
 }
@@ -82,6 +106,10 @@ export function SetLanguage(arg1) {
   return window['go']['ui']['Bridge']['SetLanguage'](arg1);
 }
 
+export function SetRetention(arg1, arg2) {
+  return window['go']['ui']['Bridge']['SetRetention'](arg1, arg2);
+}
+
 export function SetTheme(arg1) {
   return window['go']['ui']['Bridge']['SetTheme'](arg1);
 }
@@ -90,6 +118,14 @@ export function SuggestRestoreFolder(arg1, arg2) {
   return window['go']['ui']['Bridge']['SuggestRestoreFolder'](arg1, arg2);
 }
 
-export function UseVaultFolder(arg1) {
-  return window['go']['ui']['Bridge']['UseVaultFolder'](arg1);
+export function SwitchVault(arg1) {
+  return window['go']['ui']['Bridge']['SwitchVault'](arg1);
+}
+
+export function Unlock(arg1) {
+  return window['go']['ui']['Bridge']['Unlock'](arg1);
+}
+
+export function UseVaultFolder(arg1, arg2) {
+  return window['go']['ui']['Bridge']['UseVaultFolder'](arg1, arg2);
 }

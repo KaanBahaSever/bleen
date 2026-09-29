@@ -20,6 +20,7 @@ import (
 	"github.com/kaanbahasever/bleen/internal/config"
 	"github.com/kaanbahasever/bleen/internal/engine"
 	"github.com/kaanbahasever/bleen/internal/platform"
+	"github.com/kaanbahasever/bleen/internal/seal"
 	"github.com/kaanbahasever/bleen/internal/source"
 	"github.com/kaanbahasever/bleen/internal/vault"
 )
@@ -40,6 +41,8 @@ type App struct {
 	reach     map[string]*bool // source id → reachable (nil = checking)
 	job       *job
 	history   []RunRecord
+	key       *seal.Key // unlocked key of an encrypted disk (memory only)
+	keyVault  string    // which disk the key belongs to
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -127,12 +130,26 @@ type State struct {
 	Exclude          []string      `json:"exclude"`
 	DefaultExclude   []string      `json:"defaultExclude"`
 	Vault            *VaultState   `json:"vault"`
+	Vaults           []KnownVault  `json:"vaults"`
 	Sources          []SourceState `json:"sources"`
 	Job              *JobState     `json:"job"`
 	OS               string        `json:"os"`
+	KeepGenerations  int           `json:"keepGenerations"`
+	NewFullEvery     int           `json:"newFullEvery"`
+	Automation       Automation    `json:"automation"`
+}
+
+// Automation is the opt-in daily backup as the UI shows it.
+type Automation struct {
+	Supported bool   `json:"supported"`
+	Enabled   bool   `json:"enabled"`
+	Time      string `json:"time"`
 }
 
 type VaultState struct {
+	ID        string `json:"id"`
+	Encrypted bool   `json:"encrypted"`
+	Locked    bool   `json:"locked"` // encrypted and not unlocked this session
 	Path      string `json:"path"`
 	Label     string `json:"label"`
 	Connected bool   `json:"connected"`
@@ -169,8 +186,13 @@ func (a *App) stateLocked() State {
 		Exclude:          append([]string{}, a.cfg.Backup.Exclude...),
 		DefaultExclude:   source.DefaultExcludes,
 		Vault:            a.vaultInfo,
+		Vaults:           a.knownVaultsLocked(),
 		OS:               runtime.GOOS,
 		Sources:          []SourceState{},
+		KeepGenerations:  a.cfg.Backup.KeepGenerations,
+		NewFullEvery:     a.cfg.Backup.NewFullEvery,
+		Automation: Automation{Supported: platform.SchedulingSupported(),
+			Enabled: a.cfg.Automation.Enabled, Time: a.cfg.Automation.Time},
 	}
 	host, _ := os.Hostname()
 	for _, s := range a.cfg.Sources {
@@ -355,9 +377,28 @@ func isInside(p, dir string) bool {
 // Drives lists drives that could hold backups.
 func (a *App) Drives() []platform.Volume { return platform.Volumes() }
 
+// KnownVault is a backup disk bleen has used. Several disks can take turns
+// (one at home, one at the office): whichever is plugged in is used.
+type KnownVault struct {
+	ID        string `json:"id"`
+	Label     string `json:"label"`
+	Path      string `json:"path"`
+	Connected bool   `json:"connected"`
+	Active    bool   `json:"active"`
+}
+
+func (a *App) knownVaultsLocked() []KnownVault {
+	out := []KnownVault{}
+	for _, v := range a.cfg.Vaults {
+		out = append(out, KnownVault{ID: v.ID, Label: v.Label, Path: v.Path,
+			Connected: vault.IsVault(v.Path), Active: v.ID == a.cfg.Vault.ID})
+	}
+	return out
+}
+
 // UseVaultFolder sets the backup disk. It uses an existing bleen folder or
-// creates "<dir>/bleen".
-func (a *App) UseVaultFolder(dir string) (VaultState, error) {
+// creates "<dir>/bleen", encrypted with password when one is given.
+func (a *App) UseVaultFolder(dir, password string) (VaultState, error) {
 	dir = filepath.Clean(strings.TrimSpace(dir))
 	root := dir
 	switch {
@@ -368,6 +409,14 @@ func (a *App) UseVaultFolder(dir string) (VaultState, error) {
 		if !strings.EqualFold(filepath.Base(dir), "bleen") {
 			root = filepath.Join(dir, "bleen")
 		}
+		a.mu.Lock()
+		for _, s := range a.cfg.Sources {
+			if isInside(root, s.Path) {
+				a.mu.Unlock()
+				return VaultState{}, errors.New("E_VAULT_INSIDE_SOURCE")
+			}
+		}
+		a.mu.Unlock()
 		label := platform.VolumeLabel(dir)
 		if label == "" {
 			// "E:" for a drive root, otherwise the chosen folder's name.
@@ -377,11 +426,21 @@ func (a *App) UseVaultFolder(dir string) (VaultState, error) {
 				label = filepath.Base(dir)
 			}
 		}
-		v, err := vault.Create(root, label, "bleen "+Version, "")
+		v, err := vault.Create(root, label, "bleen "+Version, password)
 		if err != nil {
 			return VaultState{}, err
 		}
 		v.Close()
+	}
+	meta, err := vault.ReadMeta(root)
+	if err != nil {
+		return VaultState{}, err
+	}
+	var key *seal.Key
+	if meta.Encrypted() && password != "" {
+		if key, err = vault.Unlock(root, password); err != nil {
+			return VaultState{}, err
+		}
 	}
 	a.mu.Lock()
 	for _, s := range a.cfg.Sources {
@@ -390,12 +449,11 @@ func (a *App) UseVaultFolder(dir string) (VaultState, error) {
 			return VaultState{}, errors.New("E_VAULT_INSIDE_SOURCE")
 		}
 	}
-	meta, err := readMeta(root)
-	if err != nil {
-		a.mu.Unlock()
-		return VaultState{}, err
-	}
 	a.cfg.Vault = config.Vault{ID: meta.ID, Label: meta.Label, Path: root}
+	a.cfg.RememberVault(a.cfg.Vault)
+	if key != nil {
+		a.key, a.keyVault = key, meta.ID
+	}
 	err = a.save()
 	a.mu.Unlock()
 	a.refreshVault()
@@ -405,6 +463,70 @@ func (a *App) UseVaultFolder(dir string) (VaultState, error) {
 		return VaultState{}, err
 	}
 	return *a.vaultInfo, err
+}
+
+// SwitchVault makes another known disk the one in use.
+func (a *App) SwitchVault(id string) error {
+	a.mu.Lock()
+	found := false
+	for _, v := range a.cfg.Vaults {
+		if v.ID == id {
+			a.cfg.Vault, found = v, true
+		}
+	}
+	err := a.save()
+	a.mu.Unlock()
+	if !found {
+		return errors.New(engine.ENotFound)
+	}
+	a.refreshVault()
+	return err
+}
+
+// ForgetVault removes a disk from the list. Its backups stay on the disk.
+func (a *App) ForgetVault(id string) error {
+	a.mu.Lock()
+	a.cfg.ForgetVault(id)
+	if a.keyVault == id {
+		a.key, a.keyVault = nil, ""
+	}
+	err := a.save()
+	a.mu.Unlock()
+	a.refreshVault()
+	return err
+}
+
+// Unlock opens the encrypted disk in use for this session. The key is kept
+// in memory only and forgotten when bleen closes.
+func (a *App) Unlock(password string) error {
+	a.mu.Lock()
+	vc := a.cfg.Vault
+	a.mu.Unlock()
+	key, err := vault.Unlock(vc.Path, password)
+	if err != nil {
+		return err
+	}
+	a.mu.Lock()
+	a.key, a.keyVault = key, vc.ID
+	a.mu.Unlock()
+	a.refreshVault()
+	return nil
+}
+
+// Lock forgets the key of the encrypted disk.
+func (a *App) Lock() {
+	a.mu.Lock()
+	a.key, a.keyVault = nil, ""
+	a.mu.Unlock()
+	a.refreshVault()
+}
+
+// vaultKeyLocked returns the key for the disk in use, if unlocked.
+func (a *App) vaultKeyLocked() *seal.Key {
+	if a.key != nil && a.keyVault == a.cfg.Vault.ID {
+		return a.key
+	}
+	return nil
 }
 
 // refreshVault re-reads the disk: connection, free space and a read-only
@@ -421,12 +543,20 @@ func (a *App) refreshVault() {
 		if moved := findMovedVault(vc); moved != "" {
 			a.mu.Lock()
 			a.cfg.Vault.Path = moved
+			a.cfg.RememberVault(a.cfg.Vault)
 			a.save()
 			a.mu.Unlock()
 			vc.Path = moved
+		} else if other := a.connectedKnownVault(vc.ID); other != nil {
+			// Rotating disks: use whichever known disk is plugged in.
+			a.mu.Lock()
+			a.cfg.Vault = *other
+			a.save()
+			a.mu.Unlock()
+			vc = *other
 		}
 	}
-	info := &VaultState{Path: vc.Path, Label: vc.Label}
+	info := &VaultState{ID: vc.ID, Path: vc.Path, Label: vc.Label}
 	if !vault.IsVault(vc.Path) {
 		a.setView(info, nil)
 		return
@@ -434,11 +564,38 @@ func (a *App) refreshVault() {
 	info.Connected = true
 	info.Free, _ = platform.FreeSpace(vc.Path)
 	info.FSType, _ = platform.FSType(vc.Path)
-	db, err := openView(vc.Path, a.cfg.Dir())
+	meta, err := vault.ReadMeta(vc.Path)
+	if err != nil {
+		info.Error = err.Error()
+		a.setView(info, nil)
+		return
+	}
+	info.Encrypted = meta.Encrypted()
+	a.mu.Lock()
+	key := a.vaultKeyLocked()
+	a.mu.Unlock()
+	if info.Encrypted && key == nil {
+		info.Locked = true
+		a.setView(info, nil)
+		return
+	}
+	db, err := openView(vc.Path, a.cfg.Dir(), key)
 	if err != nil {
 		info.Error = err.Error()
 	}
 	a.setView(info, db)
+}
+
+func (a *App) connectedKnownVault(except string) *config.Vault {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, v := range a.cfg.Vaults {
+		if v.ID != except && vault.IsVault(v.Path) {
+			v := v
+			return &v
+		}
+	}
+	return nil
 }
 
 func (a *App) setView(info *VaultState, db *viewDB) {
@@ -462,9 +619,14 @@ type viewDB struct {
 }
 
 // openView copies the published catalog (never half-written: it is replaced
-// by rename) and opens the copy. No lock is needed for reading.
-func openView(root, cacheDir string) (*viewDB, error) {
-	src := filepath.Join(root, vault.SysDir, "catalog.db")
+// by rename) and opens the copy. No lock is needed for reading. An
+// encrypted catalog is decrypted into the local copy.
+func openView(root, cacheDir string, key *seal.Key) (*viewDB, error) {
+	name := "catalog.db"
+	if key != nil {
+		name += archive.SealedExt
+	}
+	src := filepath.Join(root, vault.SysDir, name)
 	if _, err := os.Stat(src); err != nil {
 		return nil, nil
 	}
@@ -473,11 +635,15 @@ func openView(root, cacheDir string) (*viewDB, error) {
 	if err != nil {
 		return nil, err
 	}
-	b, err := os.ReadFile(src)
-	if err == nil {
-		_, err = f.Write(b)
-	}
 	f.Close()
+	if key != nil {
+		err = key.DecryptFile(src, f.Name())
+	} else {
+		var b []byte
+		if b, err = os.ReadFile(src); err == nil {
+			err = os.WriteFile(f.Name(), b, 0o600)
+		}
+	}
 	if err != nil {
 		os.Remove(f.Name())
 		return nil, err
@@ -488,15 +654,6 @@ func openView(root, cacheDir string) (*viewDB, error) {
 		return nil, err
 	}
 	return &viewDB{DB: db, path: f.Name()}, nil
-}
-
-func readMeta(root string) (vault.Meta, error) {
-	v, err := vault.Open(root, vault.OpenOptions{})
-	if err != nil {
-		return vault.Meta{}, err
-	}
-	defer v.Close()
-	return v.Meta, nil
 }
 
 // findMovedVault looks for the same vault under another drive letter
@@ -515,7 +672,7 @@ func findMovedVault(vc config.Vault) string {
 		if strings.EqualFold(cand, vc.Path) || !vault.IsVault(cand) {
 			continue
 		}
-		if b, err := os.ReadFile(filepath.Join(cand, vault.SysDir, "vault.json")); err == nil && strings.Contains(string(b), vc.ID) {
+		if m, err := vault.ReadMeta(cand); err == nil && m.ID == vc.ID {
 			return cand
 		}
 	}

@@ -7,7 +7,7 @@ export function Activity():Promise<Array<app.RunRecord>>;
 
 export function AddSource(arg1:string):Promise<app.SourceState>;
 
-export function BackupNow(arg1:Array<string>):Promise<string>;
+export function BackupNow(arg1:Array<string>,arg2:boolean):Promise<string>;
 
 export function Browse(arg1:string,arg2:string,arg3:string):Promise<app.BrowseResult>;
 
@@ -23,13 +23,21 @@ export function DismissJob():Promise<void>;
 
 export function Drives():Promise<Array<platform.Volume>>;
 
+export function ExportReport(arg1:string):Promise<string>;
+
+export function ForgetVault(arg1:string):Promise<void>;
+
 export function GetState():Promise<app.State>;
 
 export function ListBackups():Promise<Array<app.BackupSource>>;
 
+export function Lock():Promise<void>;
+
 export function OpenFolder(arg1:string):Promise<void>;
 
 export function OpenURL(arg1:string):Promise<void>;
+
+export function Pause():Promise<void>;
 
 export function RemoveSource(arg1:string):Promise<void>;
 
@@ -37,14 +45,24 @@ export function RenameSource(arg1:string,arg2:string):Promise<void>;
 
 export function Restore(arg1:string,arg2:string,arg3:string,arg4:Array<string>):Promise<string>;
 
+export function Resume():Promise<void>;
+
+export function SetAutomation(arg1:boolean,arg2:string):Promise<void>;
+
 export function SetConfirmBeforeRun(arg1:boolean):Promise<void>;
 
 export function SetExcludes(arg1:Array<string>):Promise<void>;
 
 export function SetLanguage(arg1:string):Promise<void>;
 
+export function SetRetention(arg1:number,arg2:number):Promise<void>;
+
 export function SetTheme(arg1:string):Promise<void>;
 
 export function SuggestRestoreFolder(arg1:string,arg2:string):Promise<string>;
 
-export function UseVaultFolder(arg1:string):Promise<app.VaultState>;
+export function SwitchVault(arg1:string):Promise<void>;
+
+export function Unlock(arg1:string):Promise<void>;
+
+export function UseVaultFolder(arg1:string,arg2:string):Promise<app.VaultState>;

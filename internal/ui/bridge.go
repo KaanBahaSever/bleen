@@ -28,13 +28,37 @@ func (b *Bridge) AddSource(path string) (app.SourceState, error) {
 func (b *Bridge) RemoveSource(id string) error       { return b.a.RemoveSource(id) }
 func (b *Bridge) RenameSource(id, name string) error { return b.a.RenameSource(id, name) }
 func (b *Bridge) Drives() []platform.Volume          { return b.a.Drives() }
-func (b *Bridge) UseVaultFolder(dir string) (app.VaultState, error) {
-	return b.a.UseVaultFolder(dir)
+func (b *Bridge) UseVaultFolder(dir, password string) (app.VaultState, error) {
+	return b.a.UseVaultFolder(dir, password)
 }
-func (b *Bridge) BackupNow(ids []string) (string, error) { return b.a.BackupNow(ids) }
-func (b *Bridge) ConfirmPlan(ok bool)                    { b.a.ConfirmPlan(ok) }
-func (b *Bridge) Cancel()                                { b.a.Cancel() }
-func (b *Bridge) DismissJob()                            { b.a.DismissJob() }
+func (b *Bridge) BackupNow(ids []string, full bool) (string, error) { return b.a.BackupNow(ids, full) }
+func (b *Bridge) Pause()                                            { b.a.Pause() }
+func (b *Bridge) Resume()                                           { b.a.Resume() }
+func (b *Bridge) Unlock(password string) error                      { return b.a.Unlock(password) }
+func (b *Bridge) Lock()                                             { b.a.Lock() }
+func (b *Bridge) SwitchVault(id string) error                       { return b.a.SwitchVault(id) }
+func (b *Bridge) ForgetVault(id string) error                       { return b.a.ForgetVault(id) }
+func (b *Bridge) SetRetention(keep, newFullEvery int) error {
+	return b.a.SetRetention(keep, newFullEvery)
+}
+func (b *Bridge) SetAutomation(enabled bool, at string) error { return b.a.SetAutomation(enabled, at) }
+
+// ExportReport asks where to save the Activity report and writes it. It
+// returns the chosen path, or "" if cancelled.
+func (b *Bridge) ExportReport(title string) (string, error) {
+	p, err := runtime.SaveFileDialog(b.ctx, runtime.SaveDialogOptions{
+		Title:           title,
+		DefaultFilename: "bleen-report-" + time.Now().Format("2006-01-02") + ".html",
+		Filters:         []runtime.FileFilter{{DisplayName: "HTML", Pattern: "*.html"}},
+	})
+	if err != nil || p == "" {
+		return "", err
+	}
+	return p, b.a.ExportReport(p)
+}
+func (b *Bridge) ConfirmPlan(ok bool) { b.a.ConfirmPlan(ok) }
+func (b *Bridge) Cancel()             { b.a.Cancel() }
+func (b *Bridge) DismissJob()         { b.a.DismissJob() }
 func (b *Bridge) ListBackups() ([]app.BackupSource, error) {
 	return b.a.ListBackups()
 }

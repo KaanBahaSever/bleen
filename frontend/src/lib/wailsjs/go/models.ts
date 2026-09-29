@@ -1,5 +1,21 @@
 export namespace app {
 	
+	export class Automation {
+	    supported: boolean;
+	    enabled: boolean;
+	    time: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Automation(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.supported = source["supported"];
+	        this.enabled = source["enabled"];
+	        this.time = source["time"];
+	    }
+	}
 	export class BackupInfo {
 	    id: string;
 	    kind: string;
@@ -197,6 +213,7 @@ export namespace app {
 	    dest?: string;
 	    issues?: archive.Issue[];
 	    error?: JobError;
+	    pruned?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new RunRecord(source);
@@ -220,6 +237,7 @@ export namespace app {
 	        this.dest = source["dest"];
 	        this.issues = this.convertValues(source["issues"], archive.Issue);
 	        this.error = this.convertValues(source["error"], JobError);
+	        this.pruned = source["pruned"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -253,6 +271,7 @@ export namespace app {
 	    results: RunRecord[];
 	    error?: JobError;
 	    dest?: string;
+	    paused: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new JobState(source);
@@ -272,6 +291,7 @@ export namespace app {
 	        this.results = this.convertValues(source["results"], RunRecord);
 	        this.error = this.convertValues(source["error"], JobError);
 	        this.dest = source["dest"];
+	        this.paused = source["paused"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -291,6 +311,26 @@ export namespace app {
 		    }
 		    return a;
 		}
+	}
+	export class KnownVault {
+	    id: string;
+	    label: string;
+	    path: string;
+	    connected: boolean;
+	    active: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new KnownVault(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.label = source["label"];
+	        this.path = source["path"];
+	        this.connected = source["connected"];
+	        this.active = source["active"];
+	    }
 	}
 	
 	export class SourceState {
@@ -341,6 +381,9 @@ export namespace app {
 		}
 	}
 	export class VaultState {
+	    id: string;
+	    encrypted: boolean;
+	    locked: boolean;
 	    path: string;
 	    label: string;
 	    connected: boolean;
@@ -354,6 +397,9 @@ export namespace app {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.encrypted = source["encrypted"];
+	        this.locked = source["locked"];
 	        this.path = source["path"];
 	        this.label = source["label"];
 	        this.connected = source["connected"];
@@ -370,9 +416,13 @@ export namespace app {
 	    exclude: string[];
 	    defaultExclude: string[];
 	    vault?: VaultState;
+	    vaults: KnownVault[];
 	    sources: SourceState[];
 	    job?: JobState;
 	    os: string;
+	    keepGenerations: number;
+	    newFullEvery: number;
+	    automation: Automation;
 	
 	    static createFrom(source: any = {}) {
 	        return new State(source);
@@ -387,9 +437,13 @@ export namespace app {
 	        this.exclude = source["exclude"];
 	        this.defaultExclude = source["defaultExclude"];
 	        this.vault = this.convertValues(source["vault"], VaultState);
+	        this.vaults = this.convertValues(source["vaults"], KnownVault);
 	        this.sources = this.convertValues(source["sources"], SourceState);
 	        this.job = this.convertValues(source["job"], JobState);
 	        this.os = source["os"];
+	        this.keepGenerations = source["keepGenerations"];
+	        this.newFullEvery = source["newFullEvery"];
+	        this.automation = this.convertValues(source["automation"], Automation);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

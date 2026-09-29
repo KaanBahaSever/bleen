@@ -17,7 +17,8 @@ type Config struct {
 	Theme      string     `toml:"theme"`    // "light" | "dark" | "system"
 	Backup     Backup     `toml:"backup"`
 	Sources    []Source   `toml:"sources"`
-	Vault      Vault      `toml:"vault"`
+	Vault      Vault      `toml:"vault"`  // the disk in use
+	Vaults     []Vault    `toml:"vaults"` // every known disk (rotation)
 	Automation Automation `toml:"automation"`
 
 	path string
@@ -27,6 +28,8 @@ type Backup struct {
 	ConfirmBeforeRun bool     `toml:"confirm_before_run"`
 	MassChangeGuard  float64  `toml:"mass_change_guard"`
 	Exclude          []string `toml:"exclude"`
+	NewFullEvery     int      `toml:"new_full_every"`   // start a fresh full backup after N backups (0 = never)
+	KeepGenerations  int      `toml:"keep_generations"` // keep the newest N full backups with their changes (0 = all)
 }
 
 type Source struct {
@@ -43,9 +46,11 @@ type Vault struct {
 	Path  string `toml:"path,omitempty"`
 }
 
-// Automation is reserved for the future opt-in scheduler; nothing reads it yet.
+// Automation is the opt-in daily backup. When enabled, bleen registers one
+// OS scheduled task; no bleen process runs in the background.
 type Automation struct {
-	Enabled bool `toml:"enabled"`
+	Enabled bool   `toml:"enabled"`
+	Time    string `toml:"time"` // "18:00"
 }
 
 // Dir is where settings live. A file named "bleen.portable" next to the
@@ -72,7 +77,9 @@ func defaults() *Config {
 		Backup: Backup{
 			ConfirmBeforeRun: true,
 			MassChangeGuard:  0.30,
+			NewFullEvery:     30,
 		},
+		Automation: Automation{Time: "18:00"},
 	}
 }
 
@@ -89,6 +96,9 @@ func Load(dir string) (*Config, error) {
 	}
 	if err := toml.Unmarshal(b, c); err != nil {
 		return nil, err
+	}
+	if c.Vault.Path != "" {
+		c.RememberVault(c.Vault)
 	}
 	return c, nil
 }
@@ -146,4 +156,32 @@ func (c *Config) Source(id string) (Source, bool) {
 		}
 	}
 	return Source{}, false
+}
+
+// RememberVault adds or updates a disk in the known list.
+func (c *Config) RememberVault(v Vault) {
+	for i := range c.Vaults {
+		if c.Vaults[i].ID == v.ID {
+			c.Vaults[i] = v
+			return
+		}
+	}
+	c.Vaults = append(c.Vaults, v)
+}
+
+// ForgetVault removes a disk from the known list (its backups are untouched).
+func (c *Config) ForgetVault(id string) {
+	out := c.Vaults[:0]
+	for _, v := range c.Vaults {
+		if v.ID != id {
+			out = append(out, v)
+		}
+	}
+	c.Vaults = out
+	if c.Vault.ID == id {
+		c.Vault = Vault{}
+		if len(c.Vaults) > 0 {
+			c.Vault = c.Vaults[0]
+		}
+	}
 }

@@ -45,6 +45,7 @@ type JobState struct {
 	Results    []RunRecord         `json:"results"`
 	Error      *JobError           `json:"error"`
 	Dest       string              `json:"dest,omitempty"`
+	Paused     bool                `json:"paused"`
 }
 
 type JobError struct {
@@ -57,6 +58,7 @@ func (s JobState) done() bool {
 }
 
 type job struct {
+	gate     *engine.Gate
 	state    JobState
 	ctx      context.Context
 	cancel   context.CancelFunc
@@ -83,6 +85,7 @@ type RunRecord struct {
 	Dest       string          `json:"dest,omitempty"`
 	Issues     []archive.Issue `json:"issues,omitempty"`
 	Error      *JobError       `json:"error,omitempty"`
+	Pruned     int             `json:"pruned,omitempty"` // old full backups removed by retention
 }
 
 func (a *App) newJob(kind string, count int) (*job, error) {
@@ -97,8 +100,12 @@ func (a *App) newJob(kind string, count int) (*job, error) {
 	if !vault.IsVault(a.cfg.Vault.Path) {
 		return nil, errors.New("E_VAULT_DISCONNECTED")
 	}
+	if a.vaultInfo != nil && a.vaultInfo.Locked {
+		return nil, errors.New("E_PASSWORD_REQUIRED")
+	}
 	ctx, cancel := context.WithCancel(a.ctx)
 	j := &job{
+		gate:     &engine.Gate{},
 		state:    JobState{ID: uuid.NewString(), Kind: kind, Phase: PhaseScanning, Count: count},
 		ctx:      ctx,
 		cancel:   cancel,
@@ -169,6 +176,25 @@ func (a *App) Cancel() {
 	}
 }
 
+// Pause holds a running backup between files; Resume continues it.
+func (a *App) Pause()  { a.setPaused(true) }
+func (a *App) Resume() { a.setPaused(false) }
+
+func (a *App) setPaused(on bool) {
+	a.mu.Lock()
+	j := a.job
+	a.mu.Unlock()
+	if j == nil || j.state.done() {
+		return
+	}
+	if on {
+		j.gate.Pause()
+	} else {
+		j.gate.Resume()
+	}
+	a.update(j, false, func(s *JobState) { s.Paused = on })
+}
+
 // DismissJob clears a finished job from the screen.
 func (a *App) DismissJob() {
 	a.mu.Lock()
@@ -209,7 +235,7 @@ func (p progress) Issue(archive.Issue) {}
 
 // BackupNow backs up the given sources (all enabled ones when empty), one
 // after another. It returns immediately; progress arrives as "job" events.
-func (a *App) BackupNow(ids []string) (string, error) {
+func (a *App) BackupNow(ids []string, full bool) (string, error) {
 	a.mu.Lock()
 	var srcs []config.Source
 	for _, s := range a.cfg.Sources {
@@ -220,7 +246,9 @@ func (a *App) BackupNow(ids []string) (string, error) {
 	confirmAlways := a.cfg.Backup.ConfirmBeforeRun
 	excludes := append(append([]string{}, source.DefaultExcludes...), a.cfg.Backup.Exclude...)
 	guard := a.cfg.Backup.MassChangeGuard
+	fullEvery, keep := a.cfg.Backup.NewFullEvery, a.cfg.Backup.KeepGenerations
 	vaultPath := a.cfg.Vault.Path
+	key := a.vaultKeyLocked()
 	a.mu.Unlock()
 	if len(srcs) == 0 {
 		return "", errors.New("E_NO_SOURCES")
@@ -232,7 +260,7 @@ func (a *App) BackupNow(ids []string) (string, error) {
 	a.emitState()
 
 	go func() {
-		v, err := vault.Open(vaultPath, vault.OpenOptions{})
+		v, err := vault.Open(vaultPath, vault.OpenOptions{Key: key})
 		if err != nil {
 			a.finish(j, PhaseFailed, err)
 			return
@@ -248,6 +276,9 @@ func (a *App) BackupNow(ids []string) (string, error) {
 			started := time.Now()
 			rep, err := engine.Backup(j.ctx, v, source.NewLocal(s.Path, append(excludes, s.Exclude...)), engine.BackupOptions{
 				Name:            s.Name,
+				Full:            full,
+				AutoFullEvery:   fullEvery,
+				Gate:            j.gate,
 				Progress:        progress{a, j},
 				MassChangeRatio: guard,
 				Confirm: func(pl *engine.Plan) bool {
@@ -280,6 +311,7 @@ func (a *App) BackupNow(ids []string) (string, error) {
 				rec.Files, rec.Deduped = rep.FilesStored+rep.FilesDeduped, rep.FilesDeduped
 				rec.Bytes, rec.Stored, rec.Verified = rep.BytesSource, rep.BytesStored, rep.Verified
 				rec.Archives, rec.Issues = rep.Archives, rep.Issues
+				rec.Pruned = prune(v, s.Path, keep)
 			}
 			a.record(rec)
 			a.update(j, false, func(st *JobState) { st.Results = append(st.Results, rec) })
@@ -304,6 +336,7 @@ func (a *App) BackupNow(ids []string) (string, error) {
 func (a *App) Restore(sourceID, backupID, dest string, paths []string) (string, error) {
 	a.mu.Lock()
 	vaultPath := a.cfg.Vault.Path
+	key := a.vaultKeyLocked()
 	a.mu.Unlock()
 	j, err := a.newJob("restore", 1)
 	if err != nil {
@@ -311,7 +344,7 @@ func (a *App) Restore(sourceID, backupID, dest string, paths []string) (string, 
 	}
 	a.update(j, false, func(s *JobState) { s.Phase, s.Dest = PhaseRunning, dest })
 	go func() {
-		v, err := vault.Open(vaultPath, vault.OpenOptions{})
+		v, err := vault.Open(vaultPath, vault.OpenOptions{Key: key})
 		if err != nil {
 			a.finish(j, PhaseFailed, err)
 			return
@@ -348,6 +381,7 @@ func (a *App) Restore(sourceID, backupID, dest string, paths []string) (string, 
 func (a *App) CheckBackups() (string, error) {
 	a.mu.Lock()
 	vaultPath := a.cfg.Vault.Path
+	key := a.vaultKeyLocked()
 	a.mu.Unlock()
 	j, err := a.newJob("verify", 1)
 	if err != nil {
@@ -355,7 +389,7 @@ func (a *App) CheckBackups() (string, error) {
 	}
 	a.update(j, false, func(s *JobState) { s.Phase = PhaseVerifying })
 	go func() {
-		v, err := vault.Open(vaultPath, vault.OpenOptions{})
+		v, err := vault.Open(vaultPath, vault.OpenOptions{Key: key})
 		if err != nil {
 			a.finish(j, PhaseFailed, err)
 			return
@@ -426,4 +460,21 @@ func contains(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// prune applies retention after a successful backup of origin.
+func prune(v *vault.Vault, origin string, keep int) int {
+	if keep < 1 {
+		return 0
+	}
+	host, _ := os.Hostname()
+	row, err := v.Catalog.SourceByOrigin(host, filepath.Clean(origin))
+	if err != nil || row == nil {
+		return 0
+	}
+	rep, err := engine.Prune(v, row, keep)
+	if err != nil {
+		return 0
+	}
+	return rep.Generations
 }
