@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>bleen: klasörlerinin tarihli yedekleri</title>
-<meta name="description" content="bleen, klasörlerinin (ağ klasörleri dahil) tarihli ve doğrulanmış yedeklerini kendi diskinde tutar. Açık kaynak, ücretsiz, arka planda çalışmaz.">
+<title>bleen · Kolay yedekleme</title>
+<meta name="description" content="bleen, klasörlerini harici bir diske yedekler ve istediğin günün kopyasını geri yükler. Ücretsiz ve açık kaynak.">
 <meta property="og:title" content="bleen">
-<meta property="og:description" content="Dated, verified backups of your folders, on a disk you own.">
+<meta property="og:description" content="Backs up your folders to an external drive. Restores them as they were on any day.">
 <meta property="og:image" content="img/home-en.png">
 <link rel="icon" href="bleen-mascot.svg" type="image/svg+xml">
 <style>
@@ -116,7 +116,7 @@
     <nav>
       <a href="#features" data-t="nav.features">Özellikler</a>
       <a href="#how" data-t="nav.how">Nasıl çalışır</a>
-      <a href="#faq" data-t="nav.faq">Sorular</a>
+      <a href="#faq" data-t="nav.faq">SSS</a>
       <a href="https://github.com/kaanbahasever/bleen">GitHub</a>
       <button class="lang" id="lang" aria-label="Language">EN</button>
     </nav>
@@ -124,49 +124,49 @@
 
   <main>
     <div class="hero">
-      <img class="mascot" src="bleen-mascot.svg" alt="bleen maskotu">
-      <h1 data-t="hero.title" data-html>Klasörlerinin <span class="b">tarihli kopyaları</span>, senin diskinde.</h1>
-      <p data-t="hero.sub">Tıklarsın, bleen değişenleri kopyalar. Bir gün seçersin, o günkü klasörün geri gelir. Ağ klasörleri dahil.</p>
+      <img class="mascot" src="bleen-mascot.svg" alt="">
+      <h1 data-t="hero.title" data-html>Kolay <span class="b">yedekleme</span>.</h1>
+      <p data-t="hero.sub">Klasörlerini harici bir diske yedekler. İstediğin günün kopyasını geri yükler.</p>
       <div class="cta">
-        <a class="btn btn-primary" id="dl" href="https://github.com/kaanbahasever/bleen/releases/download/v0.2.0-beta.1/bleen-windows-amd64.exe">
+        <a class="btn btn-primary" href="https://github.com/kaanbahasever/bleen/releases/download/v0.2.0-beta.1/bleen-windows-amd64.exe">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14"/></svg>
           <span data-t="cta.download">Windows için indir</span>
         </a>
-        <a class="btn btn-secondary" href="https://github.com/kaanbahasever/bleen" data-t="cta.source">Kaynak kodu</a>
+        <a class="btn btn-secondary" href="https://github.com/kaanbahasever/bleen" data-t="cta.source">Kaynak kod</a>
       </div>
       <div><span class="beta">beta · v0.2.0-beta.1</span></div>
-      <p class="small" data-t="cta.more" data-html>Windows 10/11 · <a href="https://github.com/kaanbahasever/bleen/releases/download/v0.2.0-beta.1/bleen-windows7-8-amd64.exe">Windows 7/8.1 sürümü</a> · <a href="https://github.com/kaanbahasever/bleen/releases">tüm sürümler</a></p>
+      <p class="small" data-t="cta.more" data-html>Windows 10/11 · <a href="https://github.com/kaanbahasever/bleen/releases/download/v0.2.0-beta.1/bleen-windows7-8-amd64.exe">Windows 7/8.1 sürümü</a> · <a href="https://github.com/kaanbahasever/bleen/releases">Tüm sürümler</a></p>
 
       <div class="shot"><div class="bar"><i></i><i></i><i></i></div><img data-img="home" src="img/home-tr.png" alt="bleen ana ekranı" width="1620" height="1080"></div>
     </div>
 
     <section id="features">
-      <h2 data-t="f.title">Az şey yapar, iyi yapar</h2>
-      <p class="lead" data-t="f.lead">Karmaşık ayarlar yok. Bir klasör, bir disk ve bir buton.</p>
+      <h2 data-t="f.title">Özellikler</h2>
+      <p class="lead" data-t="f.lead">Kurulum gerektirmez, hesap istemez.</p>
       <div class="grid">
         <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 3-6.2M4 4v4h4"/><path d="M12 8v4l3 2"/></svg></div>
-          <h3 data-t="f1.h">İlk seferde tam, sonra değişenler</h3><p data-t="f1.p">İlk yedek her şeyi kopyalar; sonrakiler yalnızca yeni ve değişen dosyaları. Silinenler de takip edilir.</p></div>
+          <h3 data-t="f1.h">Artımlı yedekleme</h3><p data-t="f1.p">İlk yedek tüm dosyaları kopyalar. Sonraki yedekler yalnızca yeni ve değişen dosyaları alır.</p></div>
         <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><path d="M3 7h18v13H3zM3 7l2-3h14l2 3M10 11h4"/></svg></div>
-          <h3 data-t="f2.h">Düz ZIP dosyaları</h3><p data-t="f2.p">Her yedek normal bir ZIP. bleen olmasa bile Gezgin ya da 7-Zip ile açarsın.</p></div>
+          <h3 data-t="f2.h">Standart ZIP</h3><p data-t="f2.p">Yedekler normal ZIP dosyasıdır. bleen olmadan da açılabilir.</p></div>
         <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01"/></svg></div>
-          <h3 data-t="f3.h">Ağ klasörleri</h3><p data-t="f3.p"><code>\\SUNUCU\Paylaşım\Klasör</code> yolunu doğrudan eklersin; sürücü harfi atamana gerek yok.</p></div>
+          <h3 data-t="f3.h">Ağ klasörleri</h3><p data-t="f3.p" data-html><code>\\SUNUCU\Paylaşım</code> gibi ağ yollarını doğrudan ekleyebilirsin.</p></div>
         <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg></div>
-          <h3 data-t="f4.h">Doğrulanmış</h3><p data-t="f4.p">Her dosya SHA-256 ile kontrol edilir. Arşiv doğrulanmadan hiçbir şey “tamam” sayılmaz.</p></div>
+          <h3 data-t="f4.h">Doğrulama</h3><p data-t="f4.p">Her dosya SHA-256 ile kontrol edilir. Doğrulanmayan yedek kaydedilmez.</p></div>
         <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div>
-          <h3 data-t="f5.h">İsteğe bağlı şifreleme</h3><p data-t="f5.p">Parolayla şifrele; dosya adları bile gizlenir. Standart <code>age</code> aracıyla bleen olmadan da açılır.</p></div>
+          <h3 data-t="f5.h">Şifreleme</h3><p data-t="f5.p">İsteğe bağlı parola ile yedekleri ve dosya adlarını şifreler.</p></div>
         <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/></svg></div>
-          <h3 data-t="f6.h">Arka planda çalışmaz</h3><p data-t="f6.p">bleen yalnızca penceresi açıkken çalışır. Otomatik yedek istersen açarsın; varsayılan kapalı.</p></div>
+          <h3 data-t="f6.h">Arka planda çalışmaz</h3><p data-t="f6.p">bleen yalnızca açıkken çalışır. Otomatik yedekleme isteğe bağlıdır.</p></div>
       </div>
     </section>
 
     <section id="how">
       <h2 data-t="h.title">Nasıl çalışır?</h2>
-      <p class="lead" data-t="h.lead">Her yedek tek bir ZIP. Değişen dosyanın yeni hali saklanır, değişmeyenler tekrar kopyalanmaz.</p>
+      <p class="lead" data-t="h.lead">Her yedekleme tek bir ZIP dosyası oluşturur. Değişen dosyaların yalnızca son hali saklanır.</p>
       <div class="steps">
-        <div class="step"><h3 data-t="s1.h">Klasörü ve diski seç</h3><p data-t="s1.p">Yedeklenecek klasörü (ya da ağ yolunu) ve çıkarılabilir bir diski seçersin.</p></div>
-        <div class="step"><h3 data-t="s2.h">“Değişiklikleri yedekle”</h3><p data-t="s2.p">bleen neyin değiştiğini gösterir, sen onaylarsın. Kopyalar, doğrular, bitti.</p>
+        <div class="step"><h3 data-t="s1.h">Klasörü ve diski seç</h3><p data-t="s1.p">Yedeklenecek klasörü ve yedeklerin kaydedileceği diski seç.</p></div>
+        <div class="step"><h3 data-t="s2.h">Yedekle</h3><p data-t="s2.p">bleen değişiklikleri listeler. Onaylarsın; dosyalar kopyalanır ve doğrulanır.</p>
           <div class="timeline"><span><span class="dot full"></span>FULL</span><span><span class="dot"></span>+52</span><span><span class="dot"></span>+18</span><span><span class="dot"></span>+347</span></div></div>
-        <div class="step"><h3 data-t="s3.h">Bir gün seç, geri al</h3><p data-t="s3.p">Zaman çizelgesinden günü seçersin; klasör o günkü haliyle, her dosyası doğrulanarak geri gelir.</p></div>
+        <div class="step"><h3 data-t="s3.h">Geri yükle</h3><p data-t="s3.p">Bir tarih seç. Klasör o tarihteki haliyle geri yüklenir.</p></div>
       </div>
       <div class="pair" style="margin-top:24px">
         <div class="shot"><div class="bar"><i></i><i></i><i></i></div><img data-img="running" src="img/running-tr.png" alt="" width="1620" height="1080" loading="lazy"></div>
@@ -175,19 +175,19 @@
     </section>
 
     <section id="faq">
-      <h2 data-t="q.title">Merak edilenler</h2>
+      <h2 data-t="q.title">Sık sorulan sorular</h2>
       <p class="lead"></p>
-      <details><summary data-t="q1.q">bleen arka planda çalışıyor mu?</summary><p data-t="q1.a">Hayır. Pencere kapanınca bleen tamamen kapanır; servis ya da başlangıç kaydı kurmaz. Ayarlardan “Otomatik günlük yedek”i açarsan Windows günde bir kez bleen’i başlatır, o kadar.</p></details>
-      <details><summary data-t="q2.q">bleen ortadan kalkarsa yedeklerim ne olur?</summary><p data-t="q2.a">Hiçbir şey. Yedekler normal ZIP dosyalarıdır: önce FULL’ü, sonra INCREMENTAL’ları tarih sırasıyla çıkarırsın. Diskteki README.txt adım adım anlatır.</p></details>
-      <details><summary data-t="q3.q">Hangi Windows sürümlerinde çalışır?</summary><p data-t="q3.a">Windows 10 ve 11. Windows 7 ve 8.1 için ayrı bir sürüm var (WebView2 109 gerekir). macOS ve Linux sürümleri yolda; komut satırı aracı bleenctl şimdiden her üçünde çalışır.</p></details>
-      <details><summary data-t="q4.q">Şifremi unutursam?</summary><p data-t="q4.a">Şifreli yedekler açılamaz: arka kapı yok. Şifrelemeyi açarken bunu açıkça söyleriz; parolanı güvenli bir yere yaz.</p></details>
-      <details><summary data-t="q5.q">Ücretli mi?</summary><p data-t="q5.a">Hayır. bleen açık kaynaktır (Apache-2.0) ve hiçbir yere veri göndermez.</p></details>
+      <details><summary data-t="q1.q">bleen arka planda çalışır mı?</summary><p data-t="q1.a">Hayır. Pencere kapandığında bleen de kapanır. Otomatik yedeklemeyi açarsan Windows, bleen'i günde bir kez çalıştırır.</p></details>
+      <details><summary data-t="q2.q">Yedeklerimi bleen olmadan açabilir miyim?</summary><p data-t="q2.a">Evet. Önce FULL dosyasını, sonra INCREMENTAL dosyalarını tarih sırasıyla çıkar. Adımlar yedek diskindeki README.txt dosyasında yazar.</p></details>
+      <details><summary data-t="q3.q">Hangi sistemlerde çalışır?</summary><p data-t="q3.a">Windows 10 ve 11. Windows 7 ve 8.1 için ayrı bir sürüm vardır; bu sürüm WebView2 çalışma zamanı gerektirir. Komut satırı aracı bleenctl Windows, macOS ve Linux'ta çalışır.</p></details>
+      <details><summary data-t="q4.q">Parolamı unutursam ne olur?</summary><p data-t="q4.a">Şifreli yedekler açılamaz. Parolayı kurtarmanın bir yolu yoktur; güvenli bir yerde sakla.</p></details>
+      <details><summary data-t="q5.q">Ücretli mi?</summary><p data-t="q5.a">Hayır. bleen ücretsiz ve açık kaynaktır (Apache-2.0). İnternete veri göndermez.</p></details>
     </section>
   </main>
 
   <footer>
     <img class="mascot" src="bleen-mascot.svg" alt=""><br>
-    <span data-t="footer">bleen · açık kaynak (Apache-2.0) · <a href="https://github.com/kaanbahasever/bleen">GitHub</a></span>
+    <span data-t="footer" data-html>bleen · Apache-2.0 · <a href="https://github.com/kaanbahasever/bleen">GitHub</a></span>
   </footer>
 </div>
 
@@ -195,28 +195,28 @@
 const T = {
   en: {
     'nav.features': 'Features', 'nav.how': 'How it works', 'nav.faq': 'FAQ',
-    'hero.title': 'Dated copies of your folders, <span class="b">on a disk you own</span>.',
-    'hero.sub': 'Click, and bleen copies what changed. Pick a day, and you get that day’s folder back. Network folders too.',
+    'hero.title': 'Easy <span class="b">backups</span>.',
+    'hero.sub': 'Backs up your folders to an external drive. Restores them as they were on any day.',
     'cta.download': 'Download for Windows', 'cta.source': 'Source code',
-    'cta.more': 'Windows 10/11 · <a href="https://github.com/kaanbahasever/bleen/releases/download/v0.2.0-beta.1/bleen-windows7-8-amd64.exe">Windows 7/8.1 edition</a> · <a href="https://github.com/kaanbahasever/bleen/releases">all releases</a>',
-    'f.title': 'Does a few things, well', 'f.lead': 'No maze of settings. A folder, a disk and one button.',
-    'f1.h': 'Full first, then only changes', 'f1.p': 'The first backup copies everything; later ones only new and changed files. Deletions are tracked too.',
-    'f2.h': 'Plain ZIP files', 'f2.p': 'Every backup is a normal ZIP. Even without bleen, Explorer or 7-Zip can open it.',
-    'f3.h': 'Network folders', 'f3.p': 'Add <code>\\\\SERVER\\Share\\Folder</code> directly, no drive letter needed.',
-    'f4.h': 'Verified', 'f4.p': 'Every file is checked with SHA-256. Nothing counts as done until the archive is verified.',
-    'f5.h': 'Optional encryption', 'f5.p': 'Encrypt with a password; even file names are hidden. Opens without bleen via the standard <code>age</code> tool.',
-    'f6.h': 'Nothing in the background', 'f6.p': 'bleen runs only while its window is open. Automatic backups are opt-in and off by default.',
-    'h.title': 'How does it work?', 'h.lead': 'Each backup is one ZIP. A changed file is stored whole; unchanged files are never copied again.',
-    's1.h': 'Pick a folder and a disk', 's1.p': 'Choose the folder (or network path) to protect and a removable disk.',
-    's2.h': '“Back up changes”', 's2.p': 'bleen shows what changed, you confirm. It copies, verifies, done.',
-    's3.h': 'Pick a day, get it back', 's3.p': 'Choose a day on the timeline; the folder comes back exactly as it was, every file verified.',
-    'q.title': 'Questions',
-    'q1.q': 'Does bleen run in the background?', 'q1.a': 'No. Closing the window quits bleen; it installs no service or startup entry. If you turn on “Automatic daily backup”, Windows starts bleen once a day, that’s all.',
-    'q2.q': 'What if bleen disappears?', 'q2.a': 'Nothing happens to your backups. They are normal ZIP files: extract the FULL one, then the INCREMENTAL ones in date order. The README.txt on the disk explains it step by step.',
-    'q3.q': 'Which Windows versions?', 'q3.a': 'Windows 10 and 11. There is a separate edition for Windows 7 and 8.1 (needs WebView2 109). macOS and Linux apps are on the way; the bleenctl command line already runs on all three.',
-    'q4.q': 'What if I forget my password?', 'q4.a': 'Encrypted backups cannot be opened: there is no back door. We say so clearly when you turn encryption on; write your password down somewhere safe.',
-    'q5.q': 'Does it cost anything?', 'q5.a': 'No. bleen is open source (Apache-2.0) and sends nothing anywhere.',
-    'footer': 'bleen · open source (Apache-2.0) · <a href="https://github.com/kaanbahasever/bleen">GitHub</a>',
+    'cta.more': 'Windows 10/11 · <a href="https://github.com/kaanbahasever/bleen/releases/download/v0.2.0-beta.1/bleen-windows7-8-amd64.exe">Windows 7/8.1 edition</a> · <a href="https://github.com/kaanbahasever/bleen/releases">All releases</a>',
+    'f.title': 'Features', 'f.lead': 'No installation, no account.',
+    'f1.h': 'Incremental backups', 'f1.p': 'The first backup copies every file. Later backups copy only new and changed files.',
+    'f2.h': 'Standard ZIP', 'f2.p': 'Backups are regular ZIP files. You can open them without bleen.',
+    'f3.h': 'Network folders', 'f3.p': 'Add network paths such as <code>\\\\SERVER\\Share</code> directly.',
+    'f4.h': 'Verification', 'f4.p': 'Every file is checked with SHA-256. A backup is saved only after it is verified.',
+    'f5.h': 'Encryption', 'f5.p': 'Optionally encrypts backups and file names with a password.',
+    'f6.h': 'No background process', 'f6.p': 'bleen runs only while it is open. Automatic backups are optional.',
+    'h.title': 'How it works', 'h.lead': 'Each backup creates one ZIP file. Only the latest version of each changed file is stored.',
+    's1.h': 'Choose a folder and a drive', 's1.p': 'Select the folder to back up and the drive to store the backups on.',
+    's2.h': 'Back up', 's2.p': 'bleen lists the changes. You confirm; the files are copied and verified.',
+    's3.h': 'Restore', 's3.p': 'Pick a date. The folder is restored as it was on that date.',
+    'q.title': 'FAQ',
+    'q1.q': 'Does bleen run in the background?', 'q1.a': 'No. bleen quits when you close its window. If you turn on automatic backups, Windows starts bleen once a day.',
+    'q2.q': 'Can I open my backups without bleen?', 'q2.a': 'Yes. Extract the FULL file first, then the INCREMENTAL files in date order. The README.txt file on the backup drive lists the steps.',
+    'q3.q': 'Which systems are supported?', 'q3.a': 'Windows 10 and 11. A separate edition supports Windows 7 and 8.1; it requires the WebView2 runtime. The bleenctl command-line tool runs on Windows, macOS and Linux.',
+    'q4.q': 'What if I forget my password?', 'q4.a': 'Encrypted backups cannot be opened. There is no way to recover the password, so keep it somewhere safe.',
+    'q5.q': 'Is it free?', 'q5.a': 'Yes. bleen is free and open source (Apache-2.0). It sends no data over the internet.',
+    'footer': 'bleen · Apache-2.0 · <a href="https://github.com/kaanbahasever/bleen">GitHub</a>',
   },
 };
 const els = [...document.querySelectorAll('[data-t]')];
@@ -229,7 +229,7 @@ function setLang(l) {
   }
   for (const img of document.querySelectorAll('[data-img]')) img.src = `img/${img.dataset.img}-${l}.png`;
   document.getElementById('lang').textContent = l === 'tr' ? 'EN' : 'TR';
-  document.title = l === 'tr' ? 'bleen: klasörlerinin tarihli yedekleri' : 'bleen: dated backups of your folders';
+  document.title = l === 'tr' ? 'bleen · Kolay yedekleme' : 'bleen · Easy backups';
   try { localStorage.setItem('lang', l); } catch {}
 }
 let lang = 'tr';
