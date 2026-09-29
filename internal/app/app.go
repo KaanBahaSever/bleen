@@ -377,7 +377,7 @@ func (a *App) UseVaultFolder(dir string) (VaultState, error) {
 				label = filepath.Base(dir)
 			}
 		}
-		v, err := vault.Create(root, label, "bleen "+Version)
+		v, err := vault.Create(root, label, "bleen "+Version, "")
 		if err != nil {
 			return VaultState{}, err
 		}

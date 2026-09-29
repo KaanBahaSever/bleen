@@ -3,9 +3,11 @@ package archive
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"hash"
 	"io"
 	"io/fs"
 	"os"
@@ -17,10 +19,20 @@ import (
 
 // Part is one finished archive file, still carrying its temporary name.
 type Part struct {
-	TempPath  string // ".../2026-09-26_1800_INCREMENTAL.zip.partial"
-	FinalName string // "2026-09-26_1800_INCREMENTAL.zip" or "...part02.zip"
-	Manifest  *Manifest
+	TempPath    string // ".../2026-09-26_1800_INCREMENTAL.zip.partial"
+	FinalName   string // "2026-09-26_1800_INCREMENTAL.zip", "...part02.zip" or "….zip.age"
+	Manifest    *Manifest
+	Sealed      bool   // the file on disk is age-encrypted
+	PlainSHA256 []byte // SHA-256 of the ZIP bytes before encryption
 }
+
+// Sealer encrypts an archive stream (see internal/seal). Nil means plain ZIP.
+type Sealer interface {
+	Wrap(w io.Writer) (io.WriteCloser, error)
+}
+
+// SealedExt is appended to encrypted archive names.
+const SealedExt = ".age"
 
 // Blob is compressed entry data ready to be appended with CreateRaw.
 type Blob struct {
@@ -38,6 +50,7 @@ type Writer struct {
 	base     string
 	maxPart  int64
 	template Manifest
+	sealer   Sealer
 
 	cur   *partWriter
 	parts []*partWriter
@@ -46,6 +59,8 @@ type Writer struct {
 type partWriter struct {
 	path     string
 	f        *os.File
+	enc      io.WriteCloser // non-nil when sealed
+	plain    hash.Hash
 	cw       *countWriter
 	zw       *zip.Writer
 	manifest Manifest
@@ -65,8 +80,8 @@ func (c *countWriter) Write(p []byte) (int, error) {
 
 // NewWriter starts a snapshot archive in dir. base is the file name without
 // extension. maxPart <= 0 means a single part of unlimited size.
-func NewWriter(dir, base string, maxPart int64, template Manifest) (*Writer, error) {
-	w := &Writer{dir: dir, base: base, maxPart: maxPart, template: template}
+func NewWriter(dir, base string, maxPart int64, template Manifest, sealer Sealer) (*Writer, error) {
+	w := &Writer{dir: dir, base: base, maxPart: maxPart, template: template, sealer: sealer}
 	w.template.Format = FormatV1
 	w.template.Entries = nil
 	w.template.Issues = nil
@@ -78,13 +93,29 @@ func NewWriter(dir, base string, maxPart int64, template Manifest) (*Writer, err
 
 func (w *Writer) openPart() error {
 	idx := len(w.parts) + 1
-	p := filepath.Join(w.dir, fmt.Sprintf("%s.part%02d.zip.partial", w.base, idx))
+	ext := ".zip"
+	if w.sealer != nil {
+		ext += SealedExt
+	}
+	p := filepath.Join(w.dir, fmt.Sprintf("%s.part%02d%s.partial", w.base, idx, ext))
 	f, err := os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 	if err != nil {
 		return err
 	}
-	cw := &countWriter{w: f}
-	pw := &partWriter{path: p, f: f, cw: cw, zw: zip.NewWriter(cw), manifest: w.template}
+	// zip → count → (plain hash, [encrypt] → file). Plain bytes never reach
+	// the disk when the vault is encrypted.
+	pw := &partWriter{path: p, f: f, plain: sha256.New(), manifest: w.template}
+	var sink io.Writer = f
+	if w.sealer != nil {
+		if pw.enc, err = w.sealer.Wrap(f); err != nil {
+			f.Close()
+			os.Remove(p)
+			return err
+		}
+		sink = pw.enc
+	}
+	pw.cw = &countWriter{w: io.MultiWriter(pw.plain, sink)}
+	pw.zw = zip.NewWriter(pw.cw)
 	pw.manifest.Part = PartInfo{Index: idx}
 	w.parts = append(w.parts, pw)
 	w.cur = pw
@@ -171,10 +202,16 @@ func (w *Writer) Close(finishedAt time.Time) ([]Part, error) {
 	out := make([]Part, 0, len(w.parts))
 	for _, p := range w.parts {
 		m := p.manifest
+		name := PartName(w.base, m.Part.Index, len(w.parts))
+		if w.sealer != nil {
+			name += SealedExt
+		}
 		out = append(out, Part{
-			TempPath:  p.path,
-			FinalName: PartName(w.base, m.Part.Index, len(w.parts)),
-			Manifest:  &m,
+			TempPath:    p.path,
+			FinalName:   name,
+			Manifest:    &m,
+			Sealed:      w.sealer != nil,
+			PlainSHA256: p.plain.Sum(nil),
 		})
 	}
 	return out, nil
@@ -222,6 +259,11 @@ func (w *Writer) closePart(last bool) error {
 		return err
 	}
 	p.zw = nil
+	if p.enc != nil {
+		if err := p.enc.Close(); err != nil {
+			return err
+		}
+	}
 	if err := p.f.Sync(); err != nil {
 		return err
 	}

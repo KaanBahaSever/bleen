@@ -184,7 +184,7 @@ func (s *sim) mutate() {
 
 func newVault(t *testing.T) *vault.Vault {
 	t.Helper()
-	v, err := vault.Create(filepath.Join(t.TempDir(), "bleen"), "test disk", "test")
+	v, err := vault.Create(filepath.Join(t.TempDir(), "bleen"), "test disk", "test", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -378,7 +378,7 @@ func TestMassChangeGuard(t *testing.T) {
 // renamed into place but before the catalog was saved.
 func TestCrashBeforeCatalogSave(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "bleen")
-	v, err := vault.Create(root, "disk", "test")
+	v, err := vault.Create(root, "disk", "test", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -525,4 +525,71 @@ func TestGatePausesBetweenFiles(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("Wait did not return after Resume")
 	}
+}
+
+func TestEncryptedVault(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "bleen")
+	const pw = "doğru-parola-123"
+	v, err := vault.Create(root, "secret disk", "test", pw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &sim{t: t, rnd: rand.New(rand.NewPCG(21, 21)), dir: filepath.Join(t.TempDir(), "_proje")}
+	for i := range 8 {
+		s.write(fmt.Sprintf("gizli-rapor-%d.xlsx", i), s.content())
+	}
+	src := source.NewLocal(s.dir, nil)
+	var truth []tree
+	for day := 0; day < 10; day++ {
+		s.day = day
+		if day > 0 {
+			s.mutate()
+		}
+		opt := testOpts(day)
+		opt.MaxPartSize = 60000 // exercise sealed multi-part archives too
+		rep, err := Backup(context.Background(), v, src, opt)
+		if err != nil {
+			t.Fatalf("day %d: %v", day, err)
+		}
+		if !rep.NothingToDo {
+			truth = append(truth, readTree(t, s.dir))
+		}
+	}
+	restoreAll(t, v, truth)
+	if vr, err := VerifyVault(context.Background(), v, nil); err != nil || len(vr.Problems) > 0 {
+		t.Fatalf("verify: %v %+v", err, vr)
+	}
+	if err := v.Rebuild(); err != nil {
+		t.Fatal(err)
+	}
+	restoreAll(t, v, truth)
+	v.Close()
+
+	// Nothing on the backup disk may reveal a file name.
+	filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, _ := os.ReadFile(p)
+		if bytes.Contains(b, []byte("gizli-rapor")) {
+			t.Errorf("%s contains a plain file name", p)
+		}
+		if strings.HasSuffix(p, ".zip") {
+			t.Errorf("plain archive on an encrypted disk: %s", p)
+		}
+		return nil
+	})
+
+	if _, err := vault.Open(root, vault.OpenOptions{}); !errors.Is(err, vault.ErrPasswordRequired) {
+		t.Fatalf("open without password: %v", err)
+	}
+	if _, err := vault.Open(root, vault.OpenOptions{Password: "yanlış-parola"}); err == nil || !strings.Contains(err.Error(), "E_WRONG_PASSWORD") {
+		t.Fatalf("open with wrong password: %v", err)
+	}
+	v, err = vault.Open(root, vault.OpenOptions{Password: pw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer v.Close()
+	restoreAll(t, v, truth)
 }

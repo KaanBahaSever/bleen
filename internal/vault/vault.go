@@ -17,6 +17,7 @@ import (
 
 	"github.com/kaanbahasever/bleen/internal/archive"
 	"github.com/kaanbahasever/bleen/internal/catalog"
+	"github.com/kaanbahasever/bleen/internal/seal"
 )
 
 const (
@@ -37,13 +38,24 @@ func (e *LockedError) Error() string {
 }
 
 type Meta struct {
-	Format     string    `json:"format"`
-	ID         string    `json:"id"`
-	Label      string    `json:"label"`
-	CreatedAt  time.Time `json:"created_at"`
-	CreatedBy  string    `json:"created_by"`
-	Encryption any       `json:"encryption"`
+	Format     string      `json:"format"`
+	ID         string      `json:"id"`
+	Label      string      `json:"label"`
+	CreatedAt  time.Time   `json:"created_at"`
+	CreatedBy  string      `json:"created_by"`
+	Encryption *Encryption `json:"encryption"`
 }
+
+// Encryption describes an encrypted vault (see internal/seal).
+type Encryption struct {
+	Type      string `json:"type"` // "age-x25519"
+	Recipient string `json:"recipient"`
+}
+
+// ErrPasswordRequired means the vault is encrypted and no key was given.
+var ErrPasswordRequired = errors.New("E_PASSWORD_REQUIRED")
+
+const identityFile = "identity.age"
 
 type Vault struct {
 	Root    string
@@ -54,11 +66,70 @@ type Vault struct {
 	// re-imported after a crash).
 	Recovered []string
 
+	// Key is set for encrypted vaults once unlocked.
+	Key *seal.Key
+
 	work string
 }
 
 type OpenOptions struct {
 	BreakLock bool
+	Password  string    // for encrypted vaults
+	Key       *seal.Key // alternative to Password (already unlocked)
+}
+
+// Encrypted reports whether the vault's archives and catalog are encrypted.
+func (m Meta) Encrypted() bool { return m.Encryption != nil }
+
+// ReadMeta reads vault.json without locking or unlocking the vault.
+func ReadMeta(root string) (Meta, error) {
+	var m Meta
+	b, err := os.ReadFile(sys(root, metaFile))
+	if errors.Is(err, os.ErrNotExist) {
+		return m, fmt.Errorf("%s: %w", root, ErrNotVault)
+	}
+	if err != nil {
+		return m, err
+	}
+	if err := json.Unmarshal(b, &m); err != nil {
+		return m, fmt.Errorf("vault.json: %w", err)
+	}
+	if m.Format != FormatV1 {
+		return m, fmt.Errorf("unsupported vault format %q", m.Format)
+	}
+	return m, nil
+}
+
+// Unlock checks a password against an encrypted vault and returns its key.
+func Unlock(root, password string) (*seal.Key, error) {
+	b, err := os.ReadFile(sys(root, identityFile))
+	if err != nil {
+		return nil, err
+	}
+	return seal.Unlock(b, password)
+}
+
+// Sealer encrypts new archives, or is nil for a plain vault.
+func (v *Vault) Sealer() archive.Sealer {
+	if v.Key == nil {
+		return nil
+	}
+	return v.Key
+}
+
+// Opener decrypts archives, or is nil for a plain vault.
+func (v *Vault) Opener() archive.Opener {
+	if v.Key == nil {
+		return nil
+	}
+	return v.Key
+}
+
+func (v *Vault) catalogName() string {
+	if v.Meta.Encrypted() {
+		return catalogFile + archive.SealedExt
+	}
+	return catalogFile
 }
 
 func sys(root string, name ...string) string {
@@ -71,8 +142,9 @@ func IsVault(root string) bool {
 	return err == nil
 }
 
-// Create initializes a new vault at root and opens it.
-func Create(root, label, createdBy string) (*Vault, error) {
+// Create initializes a new vault at root and opens it. A non-empty password
+// makes it an encrypted vault.
+func Create(root, label, createdBy, password string) (*Vault, error) {
 	if IsVault(root) {
 		return nil, fmt.Errorf("%s already contains a bleen backup folder", root)
 	}
@@ -84,6 +156,18 @@ func Create(root, label, createdBy string) (*Vault, error) {
 		label = filepath.Base(filepath.Clean(root))
 	}
 	m := Meta{Format: FormatV1, ID: uuid.NewString(), Label: label, CreatedAt: time.Now().UTC(), CreatedBy: createdBy}
+	var key *seal.Key
+	if password != "" {
+		k, idFile, err := seal.NewKey(password)
+		if err != nil {
+			return nil, err
+		}
+		if err := writeFileSync(sys(root, identityFile), idFile); err != nil {
+			return nil, err
+		}
+		key = k
+		m.Encryption = &Encryption{Type: "age-x25519", Recipient: k.Recipient()}
+	}
 	b, _ := json.MarshalIndent(m, "", "  ")
 	if err := writeFileSync(sys(root, metaFile), b); err != nil {
 		return nil, err
@@ -91,7 +175,7 @@ func Create(root, label, createdBy string) (*Vault, error) {
 	if err := writeFileSync(filepath.Join(root, "README.txt"), []byte(vaultReadme)); err != nil {
 		return nil, err
 	}
-	v, err := Open(root, OpenOptions{})
+	v, err := Open(root, OpenOptions{Key: key})
 	if err != nil {
 		return nil, err
 	}
@@ -101,19 +185,25 @@ func Create(root, label, createdBy string) (*Vault, error) {
 // Open locks the vault, loads a working copy of its catalog and repairs
 // anything an interrupted run left behind.
 func Open(root string, opt OpenOptions) (*Vault, error) {
-	b, err := os.ReadFile(sys(root, metaFile))
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("%s: %w", root, ErrNotVault)
-	}
+	meta, err := ReadMeta(root)
 	if err != nil {
 		return nil, err
 	}
-	v := &Vault{Root: root}
-	if err := json.Unmarshal(b, &v.Meta); err != nil {
-		return nil, fmt.Errorf("vault.json: %w", err)
-	}
-	if v.Meta.Format != FormatV1 {
-		return nil, fmt.Errorf("unsupported vault format %q", v.Meta.Format)
+	v := &Vault{Root: root, Meta: meta}
+	if meta.Encrypted() {
+		switch {
+		case opt.Key != nil:
+			v.Key = opt.Key
+		case opt.Password != "":
+			if v.Key, err = Unlock(root, opt.Password); err != nil {
+				return nil, err
+			}
+		default:
+			return nil, ErrPasswordRequired
+		}
+		if v.Key.Recipient() != meta.Encryption.Recipient {
+			return nil, seal.ErrWrongPassword
+		}
 	}
 	if err := v.lock(opt.BreakLock); err != nil {
 		return nil, err
@@ -124,7 +214,7 @@ func Open(root string, opt OpenOptions) (*Vault, error) {
 			v.Close()
 		}
 	}()
-	os.Remove(sys(root, catalogFile+".tmp"))
+	os.Remove(sys(root, v.catalogName()+".tmp"))
 	if err := v.loadCatalog(); err != nil {
 		return nil, err
 	}
@@ -166,18 +256,26 @@ func (v *Vault) loadCatalog() error {
 	v.work = f.Name()
 	f.Close()
 
-	for _, name := range []string{catalogFile, catalogFile + ".1"} {
+	cur := v.catalogName()
+	for _, name := range []string{cur, cur + ".1"} {
 		src := sys(v.Root, name)
 		if _, err := os.Stat(src); err != nil {
 			continue
 		}
-		if err := copyFile(src, v.work); err != nil {
-			return err
+		var err error
+		if v.Key != nil {
+			err = v.Key.DecryptFile(src, v.work)
+		} else {
+			err = copyFile(src, v.work)
+		}
+		if err != nil {
+			v.Recovered = append(v.Recovered, fmt.Sprintf("%s unreadable: %v", name, err))
+			continue
 		}
 		db, err := catalog.Open(v.work)
 		if err == nil {
 			v.Catalog = db
-			if name != catalogFile {
+			if name != cur {
 				v.Recovered = append(v.Recovered, "catalog restored from previous revision")
 			}
 			return nil
@@ -197,15 +295,30 @@ func (v *Vault) loadCatalog() error {
 // Publish writes the working catalog to the vault atomically, keeping the
 // previous revision as catalog.db.1.
 func (v *Vault) Publish() error {
-	tmp := sys(v.Root, catalogFile+".tmp")
+	tmp := sys(v.Root, v.catalogName()+".tmp")
 	os.Remove(tmp)
-	if err := v.Catalog.SnapshotTo(tmp); err != nil {
-		return err
+	if v.Key != nil {
+		// Snapshot to the local disk, then seal onto the vault: the plain
+		// catalog (file names!) never touches the backup disk.
+		plain := v.work + ".snap"
+		os.Remove(plain)
+		if err := v.Catalog.SnapshotTo(plain); err != nil {
+			return err
+		}
+		err := v.Key.EncryptFile(plain, tmp)
+		os.Remove(plain)
+		if err != nil {
+			return err
+		}
+	} else {
+		if err := v.Catalog.SnapshotTo(tmp); err != nil {
+			return err
+		}
+		if err := syncFile(tmp); err != nil {
+			return err
+		}
 	}
-	if err := syncFile(tmp); err != nil {
-		return err
-	}
-	cur := sys(v.Root, catalogFile)
+	cur := sys(v.Root, v.catalogName())
 	if _, err := os.Stat(cur); err == nil {
 		prev := cur + ".1"
 		os.Remove(prev)
@@ -333,6 +446,8 @@ func (v *Vault) importArchives() (int, error) {
 		known[strings.ToLower(a.Rel)] = true
 	}
 	zips, _ := filepath.Glob(filepath.Join(v.Root, "*", "*.zip"))
+	sealed, _ := filepath.Glob(filepath.Join(v.Root, "*", "*.zip"+archive.SealedExt))
+	zips = append(zips, sealed...)
 	pending := map[string]*pendingSnapshot{}
 	for _, z := range zips {
 		folder := filepath.Base(filepath.Dir(z))
@@ -340,7 +455,7 @@ func (v *Vault) importArchives() (int, error) {
 		if strings.EqualFold(folder, SysDir) || known[strings.ToLower(rel)] {
 			continue
 		}
-		m, err := archive.ReadManifest(z)
+		m, err := archive.ReadManifestAny(z, v.Opener())
 		if err != nil {
 			v.Recovered = append(v.Recovered, fmt.Sprintf("skipped %s: %v", rel, err))
 			continue
@@ -453,6 +568,13 @@ To restore without bleen / bleen olmadan geri yüklemek için:
     Ardından *_INCREMENTAL.zip dosyalarını eskiden yeniye, üzerine yazarak çıkarın.
  3. Delete the files listed in each archive's DELETED.txt.
     Her arşivdeki DELETED.txt içinde listelenen dosyaları silin.
+
+Encrypted backups end with .zip.age. Open them with the free "age" tool
+(https://age-encryption.org) and your password:
+Şifreli yedekler .zip.age ile biter. Ücretsiz "age" aracı ve parolanla açılır:
+   age -d .bleen/identity.age > key.txt        (asks for the password / parolayı sorar)
+   age -d -i key.txt FILE.zip.age > FILE.zip
+Delete key.txt afterwards. / Sonra key.txt dosyasını sil.
 
 Do not rename or edit files in the .bleen folder.
 .bleen klasöründeki dosyaları değiştirmeyin.

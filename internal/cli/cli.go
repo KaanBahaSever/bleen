@@ -14,9 +14,11 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/kaanbahasever/bleen/internal/catalog"
 	"github.com/kaanbahasever/bleen/internal/engine"
+	"github.com/kaanbahasever/bleen/internal/seal"
 	"github.com/kaanbahasever/bleen/internal/source"
 	"github.com/kaanbahasever/bleen/internal/vault"
 )
@@ -52,6 +54,7 @@ func newRoot() *cobra.Command {
 	}
 	root.PersistentFlags().String("vault", os.Getenv("BLEEN_VAULT"), "backup folder on the target disk (or set BLEEN_VAULT)")
 	root.PersistentFlags().Bool("break-lock", false, "take over a vault left locked by a crashed bleen")
+	root.PersistentFlags().String("password-file", "", "read the password of an encrypted vault from a file (or set BLEEN_PASSWORD)")
 	root.AddCommand(initCmd(), backupCmd(), listCmd(), restoreCmd(), verifyCmd(), rebuildCmd())
 	return root
 }
@@ -62,7 +65,14 @@ func openVault(cmd *cobra.Command) (*vault.Vault, error) {
 		return nil, errors.New("--vault is required (the bleen folder on your backup disk)")
 	}
 	brk, _ := cmd.Flags().GetBool("break-lock")
-	v, err := vault.Open(p, vault.OpenOptions{BreakLock: brk})
+	opt := vault.OpenOptions{BreakLock: brk}
+	if meta, err := vault.ReadMeta(p); err == nil && meta.Encrypted() {
+		pwFile, _ := cmd.Flags().GetString("password-file")
+		if opt.Password, err = password(pwFile, false); err != nil {
+			return nil, err
+		}
+	}
+	v, err := vault.Open(p, opt)
 	if err != nil {
 		var le *vault.LockedError
 		if errors.As(err, &le) {
@@ -81,12 +91,21 @@ func openVault(cmd *cobra.Command) (*vault.Vault, error) {
 
 func initCmd() *cobra.Command {
 	var label string
+	var encrypt bool
 	c := &cobra.Command{
 		Use:   "init <folder>",
 		Short: "Create a bleen backup folder on a disk",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			v, err := vault.Create(args[0], label, "bleenctl "+Version)
+			password := ""
+			if encrypt {
+				pwFile, _ := cmd.Flags().GetString("password-file")
+				var err error
+				if password, err = password2(pwFile); err != nil {
+					return err
+				}
+			}
+			v, err := vault.Create(args[0], label, "bleenctl "+Version, password)
 			if err != nil {
 				return err
 			}
@@ -96,6 +115,7 @@ func initCmd() *cobra.Command {
 		},
 	}
 	c.Flags().StringVar(&label, "label", "", "friendly name for the disk")
+	c.Flags().BoolVar(&encrypt, "encrypt", false, "encrypt backups with a password (it cannot be recovered if lost)")
 	return c
 }
 
@@ -420,4 +440,48 @@ func size(b int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
+}
+
+// password reads a vault password from a file, BLEEN_PASSWORD or the terminal.
+func password(file string, confirm bool) (string, error) {
+	if file != "" {
+		b, err := os.ReadFile(file)
+		return strings.TrimRight(string(b), "\r\n"), err
+	}
+	if pw := os.Getenv("BLEEN_PASSWORD"); pw != "" {
+		return pw, nil
+	}
+	if !isTerminal(os.Stdin) {
+		return "", errors.New("this backup disk is encrypted: use --password-file or BLEEN_PASSWORD")
+	}
+	fmt.Print("Password: ")
+	b, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Println()
+	if err != nil {
+		return "", err
+	}
+	if confirm {
+		fmt.Print("Repeat password: ")
+		b2, err := term.ReadPassword(int(os.Stdin.Fd()))
+		fmt.Println()
+		if err != nil {
+			return "", err
+		}
+		if string(b) != string(b2) {
+			return "", errors.New("passwords do not match")
+		}
+	}
+	return string(b), nil
+}
+
+// password2 asks for a new password twice and warns that it cannot be recovered.
+func password2(file string) (string, error) {
+	if file == "" && os.Getenv("BLEEN_PASSWORD") == "" {
+		fmt.Println("Choose a password (8+ characters). If you lose it, the backups cannot be opened by anyone.")
+	}
+	pw, err := password(file, true)
+	if err == nil && len([]rune(pw)) < seal.MinPasswordLen {
+		err = fmt.Errorf("the password must be at least %d characters", seal.MinPasswordLen)
+	}
+	return pw, err
 }

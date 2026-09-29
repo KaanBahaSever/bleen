@@ -4,9 +4,11 @@ import (
 	"archive/zip"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 // ReadManifest returns the manifest embedded in the ZIP file at path.
@@ -98,4 +100,43 @@ func FileSHA256(path string) ([]byte, error) {
 		return nil, err
 	}
 	return h.Sum(nil), nil
+}
+
+// Opener decrypts sealed archives (implemented by *seal.Key).
+type Opener interface {
+	DecryptFile(src, dst string) error
+}
+
+// IsSealed reports whether an archive file is age-encrypted.
+func IsSealed(path string) bool { return strings.HasSuffix(path, SealedExt) }
+
+// Plain returns a path to the plain ZIP for path. Sealed archives are
+// decrypted to a temporary file on the local disk; call cleanup when done.
+func Plain(path string, key Opener, tmpDir string) (plain string, cleanup func(), err error) {
+	if !IsSealed(path) {
+		return path, func() {}, nil
+	}
+	if key == nil {
+		return "", nil, errors.New("E_PASSWORD_REQUIRED")
+	}
+	f, err := os.CreateTemp(tmpDir, "bleen-open-*.zip")
+	if err != nil {
+		return "", nil, err
+	}
+	f.Close()
+	if err := key.DecryptFile(path, f.Name()); err != nil {
+		os.Remove(f.Name())
+		return "", nil, err
+	}
+	return f.Name(), func() { os.Remove(f.Name()) }, nil
+}
+
+// ReadManifestAny reads the manifest of a plain or sealed archive.
+func ReadManifestAny(path string, key Opener) (*Manifest, error) {
+	p, cleanup, err := Plain(path, key, "")
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
+	return ReadManifest(p)
 }

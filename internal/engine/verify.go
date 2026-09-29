@@ -48,7 +48,16 @@ func VerifyVault(ctx context.Context, v *vault.Vault, prog Progress) (*VerifyRep
 			problem(EChecksumMismatch, fmt.Errorf("size is %d, catalog says %d", fi.Size(), a.Size))
 			continue
 		}
-		sum, err := archive.VerifyPart(p)
+		sum, err := archive.FileSHA256(p)
+		if err != nil {
+			problem(EChecksumMismatch, err)
+			continue
+		}
+		plain, cleanup, err := archive.Plain(p, v.Opener(), "")
+		if err == nil {
+			_, err = archive.VerifyPart(plain)
+			cleanup()
+		}
 		if err != nil {
 			problem(EChecksumMismatch, err)
 			continue

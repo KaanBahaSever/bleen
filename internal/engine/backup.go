@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -252,7 +253,7 @@ func Backup(ctx context.Context, v *vault.Vault, src *source.LocalFS, opt Backup
 		maxPart = platform.MaxPartSize(dir)
 	}
 	base := archiveBase(dir, began, snap.Kind)
-	w, err := archive.NewWriter(dir, base, maxPart, archive.Manifest{VaultID: v.Meta.ID, Source: info, Snapshot: snap})
+	w, err := archive.NewWriter(dir, base, maxPart, archive.Manifest{VaultID: v.Meta.ID, Source: info, Snapshot: snap}, v.Sealer())
 	if err != nil {
 		return nil, errorf(EVaultWrite, err, "can't write to the backup disk")
 	}
@@ -295,7 +296,7 @@ func Backup(ctx context.Context, v *vault.Vault, src *source.LocalFS, opt Backup
 	prog.Phase("verifying")
 	applied := make([]catalog.AppliedPart, 0, len(parts))
 	for _, p := range parts {
-		sum, err := archive.VerifyPart(p.TempPath)
+		sum, err := verifyNew(v, p)
 		if err != nil {
 			return nil, errorf(EChecksumMismatch, err, "the new archive did not verify")
 		}
@@ -570,4 +571,23 @@ func archiveBase(dir string, t time.Time, kind string) string {
 			return base
 		}
 	}
+}
+
+// verifyNew checks a freshly written part from disk and returns the SHA-256
+// of the file as stored. Plain parts are re-read entry by entry. Sealed
+// parts are decrypted as a stream and must match, byte for byte, the ZIP
+// that was produced (whose entries were hashed from the source while
+// reading) — the plain ZIP is never written to the backup disk.
+func verifyNew(v *vault.Vault, p archive.Part) ([]byte, error) {
+	if !p.Sealed {
+		return archive.VerifyPart(p.TempPath)
+	}
+	plain, err := v.Key.PlainSHA256(p.TempPath)
+	if err != nil {
+		return nil, err
+	}
+	if !bytes.Equal(plain, p.PlainSHA256) {
+		return nil, errors.New("decrypted archive differs from what was written")
+	}
+	return archive.FileSHA256(p.TempPath)
 }

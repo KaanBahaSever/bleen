@@ -144,14 +144,23 @@ func Restore(ctx context.Context, v *vault.Vault, src *catalog.Source, opt Resto
 	}
 	sort.Strings(names)
 	for _, a := range names {
-		if err := extractArchive(ctx, v.ArchivePath(a), byArchive[a], target, issue, func(ver catalog.Version) {
+		plain, cleanup, err := archive.Plain(v.ArchivePath(a), v.Opener(), "")
+		if err != nil {
+			for _, it := range byArchive[a] {
+				issue(it.Path, "E_ARCHIVE_MISSING", err)
+			}
+			continue
+		}
+		err = extractArchive(ctx, plain, byArchive[a], target, issue, func(ver catalog.Version) {
 			rep.Files++
 			rep.Bytes += ver.Size
 			cp.FilesDone++
 			cp.BytesDone += ver.Size
 			cp.Current = ver.Path
 			prog.Copying(cp)
-		}); err != nil {
+		})
+		cleanup()
+		if err != nil {
 			return nil, err
 		}
 	}
