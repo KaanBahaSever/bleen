@@ -145,3 +145,31 @@ func TestHandAddedSourceIsOn(t *testing.T) {
 		t.Fatalf("sources: %+v", cfg.Sources)
 	}
 }
+
+// TestScheduledRunFindsDiskUnderNewLetter: a known disk that now shows up at
+// the path of the disk in use (a new drive letter) is used, not refused.
+func TestScheduledRunFindsDiskUnderNewLetter(t *testing.T) {
+	dir := home(t)
+	e := filepath.Join(t.TempDir(), "E", "bleen")
+	a := newDisk(t, e)
+	os.RemoveAll(filepath.Dir(e)) // disk A is gone
+	f := filepath.Join(t.TempDir(), "F", "bleen")
+	b := newDisk(t, f)
+	os.Rename(filepath.Dir(f), filepath.Dir(e)) // disk B now appears as E:
+	src := filepath.Join(t.TempDir(), "docs")
+	os.MkdirAll(src, 0o755)
+	os.WriteFile(filepath.Join(src, "a.txt"), []byte("hello"), 0o644)
+	cfg, _ := config.Load(dir)
+	cfg.AddSource(src, "docs")
+	cfg.Vault = a
+	cfg.RememberVault(a)
+	cfg.RememberVault(b)
+	cfg.Save()
+	if err := RunScheduled(); err != nil {
+		t.Fatalf("scheduled run: %v", err)
+	}
+	app, _ := New()
+	if app.cfg.Vault.ID != b.ID || app.cfg.Vault.Path != e {
+		t.Fatalf("disk in use: %+v", app.cfg.Vault)
+	}
+}

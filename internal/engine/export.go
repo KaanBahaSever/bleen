@@ -153,6 +153,9 @@ func Export(ctx context.Context, v *vault.Vault, src *catalog.Source, opt Export
 	if err := f.Close(); err != nil {
 		return nil, err
 	}
+	if err := os.Chmod(tmp, 0o644); err != nil { // CreateTemp makes 0600 files
+		return nil, err
+	}
 	if err := os.Rename(tmp, dest); err != nil {
 		return nil, err
 	}

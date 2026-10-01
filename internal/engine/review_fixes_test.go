@@ -7,6 +7,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -174,4 +175,33 @@ func TestZipTimesAreLocal(t *testing.T) {
 		}
 	}
 	t.Fatal("files/a.txt not found")
+}
+
+// TestRestoredFilesAreReadable: restored files and exported ZIPs keep the
+// usual permissions on macOS and Linux (temp files start as 0600).
+func TestRestoredFilesAreReadable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no Unix permissions")
+	}
+	v := newVault(t)
+	s := &sim{t: t, rnd: rand.New(rand.NewPCG(36, 36)), dir: filepath.Join(t.TempDir(), "src")}
+	s.write("a.txt", []byte("a"))
+	if _, err := Backup(context.Background(), v, source.NewLocal(s.dir, nil), testOpts(0)); err != nil {
+		t.Fatal(err)
+	}
+	srcs, _ := v.Catalog.Sources()
+	dest := filepath.Join(t.TempDir(), "r")
+	if _, err := Restore(context.Background(), v, &srcs[0], RestoreOptions{Dest: dest}); err != nil {
+		t.Fatal(err)
+	}
+	zp := filepath.Join(t.TempDir(), "e.zip")
+	if _, err := Export(context.Background(), v, &srcs[0], ExportOptions{Dest: zp}); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{filepath.Join(dest, "a.txt"), zp} {
+		fi, err := os.Stat(p)
+		if err != nil || fi.Mode().Perm()&0o044 != 0o044 {
+			t.Fatalf("%s: mode %v (%v)", p, fi.Mode(), err)
+		}
+	}
 }

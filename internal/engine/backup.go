@@ -575,7 +575,13 @@ func archiveBase(dir string, t time.Time, kind string) string {
 	}
 	if newest != "" && t.Local().Format(layout) <= newest {
 		n, _ := time.ParseInLocation(layout, newest, time.Local)
-		for t = n.Add(time.Second); t.Local().Format(layout) <= newest; t = t.Add(time.Second) {
+		// A few steps cover a repeated DST hour; a name that can't be passed
+		// (year 9999) leaves t as it is.
+		for c := n.Add(time.Second); c.Sub(n) < time.Hour+time.Minute; c = c.Add(time.Second) {
+			if c.Local().Format(layout) > newest {
+				t = c
+				break
+			}
 		}
 	}
 	taken := func(base string) bool {

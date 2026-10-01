@@ -33,6 +33,7 @@ func Run(assets fs.FS) error {
 		Height:           720,
 		MinWidth:         880,
 		MinHeight:        600,
+		StartHidden:      devHidden,
 		BackgroundColour: &options.RGBA{R: 251, G: 250, B: 247, A: 255},
 		AssetServer:      &assetserver.Options{Assets: assets},
 		OnStartup:        lc.startup,
@@ -40,7 +41,7 @@ func Run(assets fs.FS) error {
 		OnShutdown:       lc.shutdown,
 		Bind:             []any{b},
 		SingleInstanceLock: &options.SingleInstanceLock{
-			UniqueId: "app.bleen.desktop",
+			UniqueId: instanceID,
 			OnSecondInstanceLaunch: func(options.SecondInstanceData) {
 				if lc.ctx != nil {
 					runtime.WindowUnminimise(lc.ctx)

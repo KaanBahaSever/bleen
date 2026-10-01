@@ -35,6 +35,7 @@ var ErrNotVault = errors.New("not a bleen backup folder")
 type LockedError struct {
 	Holder  string
 	Running bool // the holder is a bleen still running on this computer
+	Lost    bool // this bleen held the lock, but another one took it over
 }
 
 func (e *LockedError) Error() string {
@@ -272,7 +273,7 @@ func (v *Vault) lock(breakLock bool) error {
 		holder, _ := os.ReadFile(p)
 		var li lockInfo
 		ok := json.Unmarshal(holder, &li) == nil && strings.EqualFold(li.Host, host) && li.PID > 0
-		stale := ok && !processAlive(li.PID)
+		stale := ok && !holderRunning(li)
 		running := ok && !stale // a bleen on this computer that is still running
 		if running || (!breakLock && !stale) {
 			return &LockedError{Holder: strings.TrimSpace(string(holder)), Running: running}
@@ -285,6 +286,19 @@ func (v *Vault) lock(breakLock bool) error {
 	return errors.New("could not lock the backup folder")
 }
 
+// holderRunning reports whether the bleen that wrote a lock on this computer
+// may still be running. A process ID is reused after a reboot or a crash: a
+// live process that started after the lock was written is someone else.
+func holderRunning(li lockInfo) bool {
+	if !processAlive(li.PID) {
+		return false
+	}
+	if start, ok := processStart(li.PID); ok && !li.Since.IsZero() && start.After(li.Since.Add(time.Second)) {
+		return false
+	}
+	return true
+}
+
 // BreakLock removes a vault's lock file. Only for locks left by a bleen
 // that is certainly not running any more (e.g. on another computer). It
 // refuses when the holder is a bleen still running on this computer, such
@@ -294,7 +308,7 @@ func BreakLock(root string) error {
 	if holder, err := os.ReadFile(p); err == nil {
 		var li lockInfo
 		host, _ := os.Hostname()
-		if json.Unmarshal(holder, &li) == nil && strings.EqualFold(li.Host, host) && li.PID > 0 && processAlive(li.PID) {
+		if json.Unmarshal(holder, &li) == nil && strings.EqualFold(li.Host, host) && li.PID > 0 && holderRunning(li) {
 			return &LockedError{Holder: strings.TrimSpace(string(holder)), Running: true}
 		}
 	}
@@ -391,7 +405,7 @@ func (v *Vault) Publish() error {
 		// Never publish after another bleen took the disk over (a broken
 		// lock): its catalog would be overwritten.
 		if cur, err := os.ReadFile(sys(v.Root, lockFile)); err != nil || string(cur) != string(v.lockData) {
-			return &LockedError{Holder: strings.TrimSpace(string(cur))}
+			return &LockedError{Holder: strings.TrimSpace(string(cur)), Lost: true}
 		}
 	}
 	tmp := sys(v.Root, v.catalogName()+".tmp")
@@ -706,6 +720,15 @@ func (v *Vault) importArchives(moveAside bool) (imported, failed int, err error)
 			ps.paths = append(ps.paths, z)
 		}
 	}
+	// Generations with a full backup on disk, complete or not: their
+	// incrementals are never set aside as orphans.
+	fulls := map[string]bool{}
+	genKey := func(m *archive.Manifest) string { return fmt.Sprintf("%s/%d", m.Source.ID, m.Snapshot.Generation) }
+	for _, ps := range pending {
+		if m := ps.parts[0].Manifest; m.Snapshot.Seq == 0 {
+			fulls[genKey(m)] = true
+		}
+	}
 	snaps := make([]*pendingSnapshot, 0, len(pending))
 	for _, ps := range pending {
 		sort.Slice(ps.parts, func(i, j int) bool { return ps.parts[i].Manifest.Part.Index < ps.parts[j].Manifest.Part.Index })
@@ -742,6 +765,13 @@ func (v *Vault) importArchives(moveAside bool) (imported, failed int, err error)
 		}
 		if errors.Is(err, catalog.ErrNoFull) {
 			// Left behind when retention deleted the rest of its generation.
+			// If its full backup is on disk but could not be imported, leave
+			// it alone and count it: that needs a person, not a move.
+			if fulls[genKey(ps.parts[0].Manifest)] {
+				failed += len(ps.parts)
+				v.Recovered = append(v.Recovered, fmt.Sprintf("could not import %s/%s: its full backup is incomplete or damaged", ps.folder, ps.parts[0].Filename))
+				continue
+			}
 			v.setAside(ps, moveAside && !unreadable[ps.folder], "a backup whose full backup was deleted")
 			continue
 		}

@@ -175,6 +175,9 @@ func toJobError(err error) *JobError {
 		if le.Running {
 			return &JobError{Code: "E_VAULT_IN_USE", Message: le.Error()}
 		}
+		if le.Lost {
+			return &JobError{Code: "E_LOCK_LOST", Message: le.Error()}
+		}
 		return &JobError{Code: "E_VAULT_LOCKED", Message: le.Error()}
 	}
 	if errors.Is(err, context.Canceled) {

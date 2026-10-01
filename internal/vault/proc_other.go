@@ -1,0 +1,7 @@
+//go:build !windows && !linux && !darwin
+
+package vault
+
+import "time"
+
+func processStart(int) (time.Time, bool) { return time.Time{}, false }

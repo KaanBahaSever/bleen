@@ -2,7 +2,11 @@
 
 package vault
 
-import "golang.org/x/sys/windows"
+import (
+	"time"
+
+	"golang.org/x/sys/windows"
+)
 
 func hideDir(p string) {
 	if ptr, err := windows.UTF16PtrFromString(p); err == nil {
@@ -28,4 +32,18 @@ func processAlive(pid int) bool {
 		return true
 	}
 	return code == 259 // STILL_ACTIVE
+}
+
+// processStart returns when a process started, if it can be read.
+func processStart(pid int) (time.Time, bool) {
+	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
+	if err != nil {
+		return time.Time{}, false
+	}
+	defer windows.CloseHandle(h)
+	var created, exited, kernel, user windows.Filetime
+	if windows.GetProcessTimes(h, &created, &exited, &kernel, &user) != nil {
+		return time.Time{}, false
+	}
+	return time.Unix(0, created.Nanoseconds()), true
 }

@@ -85,6 +85,23 @@ func RunScheduled() error {
 		return fail("E_CONFIG_RESET", "scheduled backup: the settings file could not be read")
 	}
 	vc := a.cfg.Vault
+	m, merr := vault.ReadMeta(vc.Path)
+	if merr == nil && m.ID != vc.ID {
+		// Another disk is at this path. If it is a known one (rotation, or
+		// a new drive letter), use it here and remember that.
+		known := vc.ID == "" // chosen before disk ids were recorded
+		for _, k := range a.cfg.Vaults {
+			known = known || k.ID == m.ID
+		}
+		if known {
+			vc = config.Vault{ID: m.ID, Label: m.Label, Path: vc.Path}
+			a.mu.Lock()
+			a.cfg.Vault = vc
+			a.cfg.RememberVault(vc)
+			a.save()
+			a.mu.Unlock()
+		}
+	}
 	if m, err := vault.ReadMeta(vc.Path); err != nil || m.ID != vc.ID {
 		// Rotating disks often appear at the same path: use whichever
 		// known disk is plugged in, and remember it as the one in use.

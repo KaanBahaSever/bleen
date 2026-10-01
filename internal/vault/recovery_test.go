@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -288,5 +290,68 @@ func TestBreakLockRefusesRunningBleen(t *testing.T) {
 	}
 	if _, err := vault.Open(f.root, vault.OpenOptions{BreakLock: true}); err == nil {
 		t.Fatal("--break-lock took the disk from a running bleen")
+	}
+}
+
+// TestStaleLockWithReusedPID: after a crash or reboot the lock's process ID
+// can belong to another program. That program started after the lock was
+// written, so the lock is stale and must not block the disk.
+func TestStaleLockWithReusedPID(t *testing.T) {
+	f := newFixture(t)
+	f.v.Close()
+	f.v = nil
+	cmd := exec.Command("ping", "-n", "30", "127.0.0.1")
+	if runtime.GOOS != "windows" {
+		cmd = exec.Command("sleep", "30")
+	}
+	if err := cmd.Start(); err != nil {
+		t.Skip(err)
+	}
+	defer func() { cmd.Process.Kill(); cmd.Wait() }()
+	host, _ := os.Hostname()
+	lock := fmt.Sprintf(`{"host":%q,"pid":%d,"since":%q}`, host, cmd.Process.Pid, time.Now().Add(-time.Hour).UTC().Format(time.RFC3339Nano))
+	os.WriteFile(filepath.Join(f.root, ".bleen", "lock"), []byte(lock), 0o644)
+	v, err := vault.Open(f.root, vault.OpenOptions{})
+	if err != nil {
+		t.Fatalf("a lock with a reused process id blocked the disk: %v", err)
+	}
+	f.v = v
+}
+
+// TestIncrementalsStayWhenTheirFullIsIncomplete: a missing part of a full
+// backup must not send that generation's incrementals away as orphans.
+func TestIncrementalsStayWhenTheirFullIsIncomplete(t *testing.T) {
+	f := newFixture(t)
+	rnd := rand.New(rand.NewPCG(3, 3))
+	for i := range 8 {
+		f.write(fmt.Sprintf("f%d.bin", i), random(rnd, 30000))
+	}
+	f.backup(false, 100000)
+	f.write("new.txt", []byte("later"))
+	f.backup(false, 100000)
+	f.v.Close()
+	f.v = nil
+	dir := filepath.Join(f.root, "src")
+	all := archives(t, dir)
+	var incr string
+	for _, a := range all {
+		if strings.Contains(a, "INCREMENTAL") {
+			incr = a
+		}
+	}
+	os.Remove(filepath.Join(f.root, ".bleen", "catalog.db"))
+	os.Remove(filepath.Join(f.root, ".bleen", "catalog.db.1"))
+	for _, a := range all {
+		if strings.Contains(a, "FULL.part02") {
+			os.Remove(filepath.Join(dir, a))
+		}
+	}
+	v, err := vault.Open(f.root, vault.OpenOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.v = v
+	if _, err := os.Stat(filepath.Join(dir, incr)); err != nil {
+		t.Fatalf("the incremental was moved: %v (recovered: %v)", err, v.Recovered)
 	}
 }

@@ -344,6 +344,9 @@ func extractOne(f *zip.File, dst string, it catalog.Version) error {
 	if err == nil && it.SHA256 != "" && hex.EncodeToString(h.Sum(nil)) != it.SHA256 {
 		err = errChecksum
 	}
+	if err == nil {
+		err = os.Chmod(tmp, 0o644) // CreateTemp makes 0600 files
+	}
 	if err != nil {
 		os.Remove(tmp)
 		return err

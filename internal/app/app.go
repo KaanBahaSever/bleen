@@ -452,7 +452,7 @@ func (a *App) BreakLock() error {
 		return errors.New("E_BUSY")
 	}
 	if err := vault.BreakLock(p); err != nil {
-		return err
+		return errors.New(toJobError(err).Code)
 	}
 	a.refreshVault()
 	return nil
