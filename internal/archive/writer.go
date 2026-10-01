@@ -182,7 +182,7 @@ func (w *Writer) AddFile(e Entry, b Blob) (partIndex int, zipName string, err er
 	return w.cur.manifest.Part.Index, zipName, nil
 }
 
-// reserve is headroom for README, DELETED.txt and the ZIP end records:
+// reserve is headroom for DELETED.txt, the manifest and the ZIP end records:
 // 1 MiB, or a twentieth of very small part limits.
 func (w *Writer) reserve() int64 { return min(1<<20, w.maxPart/20) }
 
@@ -207,7 +207,7 @@ func PartName(base string, idx, count int) string {
 // CurrentPart is the index of the part that receives the next entry.
 func (w *Writer) CurrentPart() int { return w.cur.manifest.Part.Index }
 
-// Close finishes every part (manifest, DELETED.txt, README.txt) and fsyncs.
+// Close finishes every part (manifest, DELETED.txt) and fsyncs.
 // finishedAt is stamped on all manifests.
 func (w *Writer) Close(finishedAt time.Time) ([]Part, error) {
 	for _, p := range w.parts {
@@ -262,9 +262,6 @@ func (w *Writer) closePart(last bool) error {
 			return err
 		}
 	}
-	if err := writeSmall(p.zw, ReadmeName, []byte(readmeText)); err != nil {
-		return err
-	}
 	mb, err := json.MarshalIndent(p.manifest, "", "  ")
 	if err != nil {
 		return err
@@ -297,6 +294,28 @@ func writeSmall(zw *zip.Writer, name string, data []byte) error {
 	return err
 }
 
+// CopyEntry copies f's compressed data unchanged into zw under a new name.
+func CopyEntry(zw *zip.Writer, f *zip.File, name string, mtime time.Time) error {
+	fh := &zip.FileHeader{
+		Name:               name,
+		Method:             f.Method,
+		CRC32:              f.CRC32,
+		CompressedSize64:   f.CompressedSize64,
+		UncompressedSize64: f.UncompressedSize64,
+	}
+	prepareRawHeader(fh, mtime)
+	w, err := zw.CreateRaw(fh)
+	if err != nil {
+		return err
+	}
+	r, err := f.OpenRaw()
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(w, r)
+	return err
+}
+
 // prepareRawHeader does for CreateRaw what zip.Writer.CreateHeader does
 // implicitly: UTF-8 flag, version fields and the extended-timestamp field.
 func prepareRawHeader(fh *zip.FileHeader, mtime time.Time) {
@@ -322,27 +341,3 @@ func prepareRawHeader(fh *zip.FileHeader, mtime time.Time) {
 	binary.LittleEndian.PutUint32(eb[5:], uint32(mtime.Unix()))
 	fh.Extra = append(fh.Extra, eb[:]...)
 }
-
-const readmeText = `bleen backup archive
-====================
-
-EN  This ZIP file was made by bleen (https://github.com/kaanbahasever/bleen).
-    files/        the files that were new or changed at this backup
-    DELETED.txt   paths that were deleted since the previous backup
-    bleen-manifest.json   exact details (sizes, dates, SHA-256)
-
-    To restore without bleen: extract the newest FULL archive. Then, for
-    each later INCREMENTAL archive in name order: extract it (overwrite
-    when asked), then delete the paths listed in its DELETED.txt, before
-    moving on to the next archive.
-
-TR  Bu ZIP dosyası bleen tarafından oluşturuldu.
-    files/        bu yedekte yeni olan veya değişen dosyalar
-    DELETED.txt   önceki yedekten bu yana silinen dosyalar
-    bleen-manifest.json   ayrıntılar (boyut, tarih, SHA-256)
-
-    bleen olmadan geri yüklemek için: en yeni FULL arşivini çıkarın.
-    Sonra sonraki her INCREMENTAL arşivi için, ad sırasıyla: arşivi çıkarın
-    (üzerine yazın), ardından içindeki DELETED.txt'de yazan dosyaları silin;
-    sonra bir sonraki arşive geçin.
-`

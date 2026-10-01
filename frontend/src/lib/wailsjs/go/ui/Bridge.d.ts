@@ -21,6 +21,8 @@ export function CheckBackups():Promise<string>;
 
 export function ChooseFolder(arg1:string,arg2:string):Promise<string>;
 
+export function ChooseZipFile(arg1:string,arg2:string):Promise<string>;
+
 export function ConfirmPlan(arg1:boolean):Promise<void>;
 
 export function DismissJob():Promise<void>;
@@ -28,6 +30,8 @@ export function DismissJob():Promise<void>;
 export function DismissNotice():Promise<void>;
 
 export function Drives():Promise<Array<platform.Volume>>;
+
+export function Export(arg1:string,arg2:string,arg3:string,arg4:Array<string>):Promise<string>;
 
 export function ExportReport(arg1:string):Promise<string>;
 
@@ -64,6 +68,8 @@ export function SetLanguage(arg1:string):Promise<void>;
 export function SetRetention(arg1:number,arg2:number):Promise<void>;
 
 export function SetTheme(arg1:string):Promise<void>;
+
+export function SuggestExportFile(arg1:string,arg2:string):Promise<string>;
 
 export function SuggestRestoreFolder(arg1:string,arg2:string):Promise<string>;
 

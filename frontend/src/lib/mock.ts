@@ -42,7 +42,7 @@ const backups = [
 ];
 
 const state: any = {
-  version: 'v0.2.0-beta.1',
+  version: 'v0.3.0-beta.1',
   language: lang,
   theme: new URLSearchParams(location.search).get('theme') ?? 'light',
   confirmBeforeRun: true,
@@ -183,6 +183,9 @@ const Bridge: Record<string, (...a: any[]) => Promise<any>> = {
     totalBytes: 14.1e9,
   }),
   Restore: async () => 'j2',
+  Export: async () => 'j3',
+  SuggestExportFile: async (name) => `C:\\Users\\Ayşe\\Desktop\\${name} (geri yüklenen).zip`,
+  ChooseZipFile: async () => '',
   SuggestRestoreFolder: async (name) => `C:\\Users\\Ayşe\\Desktop\\${name} (geri yüklenen)`,
   CheckBackups: async () => 'j3',
   Activity: async () => runs,

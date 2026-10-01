@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ChevronRight, Folder, File, RotateCcw, Square, SquareCheck, FolderOpen } from '@lucide/svelte';
+  import { ChevronRight, Folder, File, RotateCcw, Square, SquareCheck, FolderOpen, FileArchive } from '@lucide/svelte';
   import Mascot from '../lib/ui/Mascot.svelte';
   import Sheet from '../lib/ui/Sheet.svelte';
   import UnlockSheet from '../lib/UnlockSheet.svelte';
@@ -13,7 +13,15 @@
   let dir = $state('');
   let listing = $state<app.BrowseResult | null>(null);
   let selected = $state<string[]>([]);
-  let restoring = $state<{ sourceId: string; backupId: string; paths: string[]; dest: string; date: string } | null>(null);
+  let restoring = $state<{
+    sourceId: string;
+    backupId: string;
+    paths: string[];
+    mode: 'folder' | 'zip';
+    folder: string;
+    zip: string;
+    date: string;
+  } | null>(null);
   let error = $state('');
   let unlocking = $state(false);
 
@@ -66,19 +74,31 @@
   }
 
   async function startRestore(paths: string[], b: app.BackupInfo) {
-    const dest = await api.SuggestRestoreFolder(source?.name ?? 'bleen', String(b.finishedAt));
-    restoring = { sourceId, backupId: b.id, paths, dest, date: fmtDate(lang(), b.finishedAt) };
+    const name = source?.name ?? 'bleen';
+    const [folder, zip] = await Promise.all([
+      api.SuggestRestoreFolder(name, String(b.finishedAt)),
+      api.SuggestExportFile(name, String(b.finishedAt)),
+    ]);
+    restoring = { sourceId, backupId: b.id, paths, mode: 'folder', folder, zip, date: fmtDate(lang(), b.finishedAt) };
   }
 
   async function changeDest() {
-    const p = await api.ChooseFolder(t('restore.where'), '');
-    if (p && restoring) restoring.dest = p;
+    if (!restoring) return;
+    if (restoring.mode === 'zip') {
+      const p = await api.ChooseZipFile(t('restore.where.zip'), restoring.zip);
+      if (p && restoring) restoring.zip = /\.zip$/i.test(p) ? p : p + '.zip';
+    } else {
+      const p = await api.ChooseFolder(t('restore.where'), '');
+      if (p && restoring) restoring.folder = p;
+    }
   }
 
   async function go() {
     if (!restoring) return;
+    const r = restoring;
     try {
-      await api.Restore(restoring.sourceId, restoring.backupId, restoring.dest, restoring.paths);
+      if (r.mode === 'zip') await api.Export(r.sourceId, r.backupId, r.zip, r.paths);
+      else await api.Restore(r.sourceId, r.backupId, r.folder, r.paths);
       restoring = null;
     } catch (e) {
       toast(errText(e));
@@ -211,15 +231,32 @@
         ? t('restore.what.some', { n: restoring.paths.length, date: restoring.date })
         : t('restore.what.all', { date: restoring.date })}
     </p>
-    <label class="mt-5 block text-[13px] font-semibold text-muted" for="dest">{t('restore.where')}</label>
-    <div class="mt-1 flex gap-2">
-      <input id="dest" class="input font-mono text-[13px]" bind:value={restoring.dest} spellcheck="false" />
-      <button class="btn btn-secondary" onclick={changeDest}><FolderOpen size={16} />{t('common.change')}</button>
+    <div class="seg mt-5" role="radiogroup" aria-label={t('restore.as')}>
+      <button role="radio" aria-checked={restoring.mode === 'folder'} class:on={restoring.mode === 'folder'} onclick={() => (restoring!.mode = 'folder')}>
+        <FolderOpen size={15} />{t('restore.as.folder')}
+      </button>
+      <button role="radio" aria-checked={restoring.mode === 'zip'} class:on={restoring.mode === 'zip'} onclick={() => (restoring!.mode = 'zip')}>
+        <FileArchive size={15} />{t('restore.as.zip')}
+      </button>
     </div>
-    <p class="mt-2 text-[12px] text-muted">{t('restore.hint')}</p>
+    {#if restoring.mode === 'zip'}
+      <label class="mt-4 block text-[13px] font-semibold text-muted" for="dest">{t('restore.where.zip')}</label>
+      <div class="mt-1 flex gap-2">
+        <input id="dest" class="input font-mono text-[13px]" bind:value={restoring.zip} spellcheck="false" />
+        <button class="btn btn-secondary" onclick={changeDest}><FileArchive size={16} />{t('common.change')}</button>
+      </div>
+      <p class="mt-2 text-[12px] text-muted">{store.state?.vault?.encrypted ? t('restore.hint.zipEnc') : t('restore.hint.zip')}</p>
+    {:else}
+      <label class="mt-4 block text-[13px] font-semibold text-muted" for="dest">{t('restore.where')}</label>
+      <div class="mt-1 flex gap-2">
+        <input id="dest" class="input font-mono text-[13px]" bind:value={restoring.folder} spellcheck="false" />
+        <button class="btn btn-secondary" onclick={changeDest}><FolderOpen size={16} />{t('common.change')}</button>
+      </div>
+      <p class="mt-2 text-[12px] text-muted">{t('restore.hint')}</p>
+    {/if}
     <div class="mt-6 flex justify-end gap-2">
       <button class="btn btn-ghost" onclick={() => (restoring = null)}>{t('common.cancel')}</button>
-      <button class="btn btn-primary" onclick={go}>{t('restore.go')}</button>
+      <button class="btn btn-primary" onclick={go}>{restoring.mode === 'zip' ? t('restore.go.zip') : t('restore.go')}</button>
     </div>
   </Sheet>
 {/if}

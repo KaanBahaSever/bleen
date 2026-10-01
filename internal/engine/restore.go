@@ -83,21 +83,18 @@ func Restore(ctx context.Context, v *vault.Vault, src *catalog.Source, opt Resto
 	if err != nil {
 		return nil, err
 	}
+	if insideDir(v.Root, dest) {
+		return nil, errorf(EDestInVault, nil, "%s is inside the backup folder", dest)
+	}
 	if des, err := os.ReadDir(dest); err == nil && len(des) > 0 && !opt.Overwrite {
 		return nil, errorf(EDestNotEmpty, nil, "%s is not empty; choose an empty folder or allow overwriting", dest)
 	}
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return nil, err
 	}
-	versions, err := v.Catalog.StateAt(src.ID, snap.GenerationID, snap.Seq)
+	versions, err := stateFor(v, src, snap, opt.Paths)
 	if err != nil {
 		return nil, err
-	}
-	if len(opt.Paths) > 0 {
-		versions = selectPaths(versions, opt.Paths)
-		if len(versions) == 0 {
-			return nil, errorf(ENotFound, nil, "none of the selected paths exist in this backup")
-		}
 	}
 
 	rep := &RestoreReport{Snapshot: *snap, Dest: dest}
@@ -208,6 +205,44 @@ func Restore(ctx context.Context, v *vault.Vault, src *catalog.Source, opt Resto
 		rep.Dirs++
 	}
 	return rep, ctx.Err()
+}
+
+// stateFor lists what a source contained at a snapshot, optionally only
+// the chosen files and folders.
+func stateFor(v *vault.Vault, src *catalog.Source, snap *catalog.Snapshot, paths []string) ([]catalog.Version, error) {
+	versions, err := v.Catalog.StateAt(src.ID, snap.GenerationID, snap.Seq)
+	if err != nil {
+		return nil, err
+	}
+	if len(paths) > 0 {
+		versions = selectPaths(versions, paths)
+		if len(versions) == 0 {
+			return nil, errorf(ENotFound, nil, "none of the selected paths exist in this backup")
+		}
+	}
+	return versions, nil
+}
+
+// insideDir reports whether p is dir itself or below it.
+func insideDir(dir, p string) bool {
+	var err error
+	if dir, err = filepath.Abs(dir); err != nil {
+		return false
+	}
+	if p, err = filepath.Abs(p); err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(dir, p)
+	if err != nil {
+		return false
+	}
+	if runtime.GOOS != "linux" {
+		rel2, err2 := filepath.Rel(strings.ToLower(dir), strings.ToLower(p))
+		if err2 == nil {
+			rel = rel2
+		}
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
 
 func extractArchive(ctx context.Context, path string, items []catalog.Version,

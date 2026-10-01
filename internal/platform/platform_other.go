@@ -96,8 +96,18 @@ func VolumeLabel(dir string) string {
 
 // Reveal opens a folder in the file manager.
 func Reveal(path string) error {
+	isFile := false
+	if fi, err := os.Stat(path); err == nil && !fi.IsDir() {
+		isFile = true
+	}
 	if runtime.GOOS == "darwin" {
+		if isFile {
+			return exec.Command("open", "-R", path).Start()
+		}
 		return exec.Command("open", path).Start()
+	}
+	if isFile {
+		path = filepath.Dir(path)
 	}
 	return exec.Command("xdg-open", path).Start()
 }

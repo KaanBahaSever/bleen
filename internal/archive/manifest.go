@@ -13,7 +13,6 @@ const (
 	FormatV1     = "bleen.archive/v1"
 	ManifestName = "bleen-manifest.json"
 	DeletedName  = "DELETED.txt"
-	ReadmeName   = "README.txt"
 	FilesPrefix  = "files/"
 )
 

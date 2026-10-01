@@ -23,7 +23,8 @@
   }
 
   function title(r: app.RunRecord) {
-    const kind = r.kind === 'restore' ? t('act.restore') : r.kind === 'verify' ? t('act.verify') : t('act.backup');
+    const kind =
+      r.kind === 'restore' ? t('act.restore') : r.kind === 'export' ? t('act.zip') : r.kind === 'verify' ? t('act.verify') : t('act.backup');
     return r.source ? `${kind} · ${r.source}` : kind;
   }
 
@@ -33,6 +34,7 @@
     if (r.result === 'nothing') return t('act.nothing');
     if (r.kind === 'verify') return r.issues?.length ? t('act.verifyBad', { n: r.issues.length }) : t('run.verifyOk', { n: r.files });
     if (r.kind === 'restore') return `${t('run.restored', { n: fmtNumber(lang(), r.files) })} · ${fmtSize(lang(), r.bytes)}`;
+    if (r.kind === 'export') return `${t('run.exported', { n: fmtNumber(lang(), r.files) })} · ${fmtSize(lang(), r.bytes)}`;
     return `${t('run.ok.files', { n: fmtNumber(lang(), r.files) })} · ${fmtSize(lang(), r.stored)}`;
   }
 </script>

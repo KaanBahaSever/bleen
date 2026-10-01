@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kaanbahasever/bleen/internal/archive"
+	"github.com/kaanbahasever/bleen/internal/catalog"
 	"github.com/kaanbahasever/bleen/internal/config"
 	"github.com/kaanbahasever/bleen/internal/engine"
 	"github.com/kaanbahasever/bleen/internal/seal"
@@ -370,6 +371,21 @@ func (a *App) BackupNow(ids []string, full bool) (string, error) {
 
 // Restore restores a backup (or only some paths of it) into dest.
 func (a *App) Restore(sourceID, backupID, dest string, paths []string) (string, error) {
+	return a.restoreJob("restore", sourceID, dest, func(ctx context.Context, v *vault.Vault, src *catalog.Source, p engine.Progress) (*engine.RestoreReport, error) {
+		return engine.Restore(ctx, v, src, engine.RestoreOptions{Snapshot: backupID, Dest: dest, Paths: paths, Progress: p})
+	})
+}
+
+// Export saves a backup (or only some paths of it) as one new ZIP file.
+func (a *App) Export(sourceID, backupID, dest string, paths []string) (string, error) {
+	return a.restoreJob("export", sourceID, dest, func(ctx context.Context, v *vault.Vault, src *catalog.Source, p engine.Progress) (*engine.RestoreReport, error) {
+		return engine.Export(ctx, v, src, engine.ExportOptions{Snapshot: backupID, Dest: dest, Paths: paths, Progress: p})
+	})
+}
+
+type restoreFunc func(context.Context, *vault.Vault, *catalog.Source, engine.Progress) (*engine.RestoreReport, error)
+
+func (a *App) restoreJob(kind, sourceID, dest string, run restoreFunc) (string, error) {
 	a.mu.Lock()
 	vaultPath, vaultID := a.cfg.Vault.Path, a.cfg.Vault.ID
 	key := a.vaultKeyLocked()
@@ -377,7 +393,7 @@ func (a *App) Restore(sourceID, backupID, dest string, paths []string) (string, 
 	if !filepath.IsAbs(dest) {
 		return "", errors.New("E_NOT_ABSOLUTE")
 	}
-	j, err := a.newJob("restore", 1)
+	j, err := a.newJob(kind, 1)
 	if err != nil {
 		return "", err
 	}
@@ -396,11 +412,9 @@ func (a *App) Restore(sourceID, backupID, dest string, paths []string) (string, 
 		}
 		a.update(j, false, func(s *JobState) { s.SourceName = src.Name })
 		started := time.Now()
-		rep, err := engine.Restore(j.ctx, v, src, engine.RestoreOptions{
-			Snapshot: backupID, Dest: dest, Paths: paths, Progress: progress{a, j},
-		})
+		rep, err := run(j.ctx, v, src, progress{a, j})
 		v.Close()
-		rec := RunRecord{ID: uuid.NewString(), Kind: "restore", Source: src.Name, StartedAt: started, FinishedAt: time.Now(), Dest: dest}
+		rec := RunRecord{ID: uuid.NewString(), Kind: kind, Source: src.Name, StartedAt: started, FinishedAt: time.Now(), Dest: dest}
 		if err != nil {
 			rec.Result, rec.Error = "failed", toJobError(err)
 			phase := PhaseFailed

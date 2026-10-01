@@ -295,17 +295,20 @@ func listCmd() *cobra.Command {
 }
 
 func restoreCmd() *cobra.Command {
-	var to, at, id string
+	var to, zipTo, at, id string
+	var only []string
 	var overwrite bool
 	c := &cobra.Command{
-		Use:   "restore <source> --to <folder>",
-		Short: "Restore a folder as it was on a given day",
+		Use:   "restore <source> (--to <folder> | --zip <file.zip>)",
+		Short: "Restore a folder as it was on a given day, or save that day as one ZIP",
 		Example: `  bleenctl restore _proje --at 2026-09-27 --to D:\Restore\Proje --vault E:\bleen
-  bleenctl restore _proje --to D:\Restore\Latest --vault E:\bleen`,
+  bleenctl restore _proje --to D:\Restore\Latest --vault E:\bleen
+  bleenctl restore _proje --at 2026-09-27 --zip D:\proje-0927.zip --vault E:\bleen
+  bleenctl restore _proje --only Muhasebe/2026 --only rapor.xlsx --to D:\Restore --vault E:\bleen`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if to == "" {
-				return errors.New("--to is required")
+			if (to == "") == (zipTo == "") {
+				return errors.New("give either --to <folder> or --zip <file.zip>")
 			}
 			v, err := openVault(cmd)
 			if err != nil {
@@ -321,14 +324,23 @@ func restoreCmd() *cobra.Command {
 				return err
 			}
 			p := newPrinter()
-			rep, err := engine.Restore(cmd.Context(), v, src, engine.RestoreOptions{
-				Snapshot: id, Before: before, Dest: to, Overwrite: overwrite, Progress: p,
-			})
+			var rep *engine.RestoreReport
+			verb := "restored to"
+			if zipTo != "" {
+				verb = "saved in"
+				rep, err = engine.Export(cmd.Context(), v, src, engine.ExportOptions{
+					Snapshot: id, Before: before, Dest: zipTo, Paths: only, Progress: p,
+				})
+			} else {
+				rep, err = engine.Restore(cmd.Context(), v, src, engine.RestoreOptions{
+					Snapshot: id, Before: before, Dest: to, Overwrite: overwrite, Paths: only, Progress: p,
+				})
+			}
 			p.done()
 			if err != nil {
 				return err
 			}
-			fmt.Printf("✓ %d files restored to %s (%s), as of %s\n", rep.Files, rep.Dest, size(rep.Bytes),
+			fmt.Printf("✓ %d files %s %s (%s), as of %s\n", rep.Files, verb, rep.Dest, size(rep.Bytes),
 				rep.Snapshot.FinishedAt.Local().Format("2006-01-02 15:04"))
 			printIssues(rep.Issues, false)
 			if len(rep.Issues) > 0 {
@@ -340,6 +352,8 @@ func restoreCmd() *cobra.Command {
 	}
 	f := c.Flags()
 	f.StringVar(&to, "to", "", "destination folder (should be new or empty)")
+	f.StringVar(&zipTo, "zip", "", "save as this new ZIP file instead of a folder (not encrypted)")
+	f.StringArrayVar(&only, "only", nil, "restore only this file or folder (relative path; repeatable)")
 	f.StringVar(&at, "at", "latest", "day (2026-09-27), day and time (\"2026-09-27 18:00\") or 'latest'")
 	f.StringVar(&id, "id", "", "backup id from 'bleenctl list <source>' (overrides --at)")
 	f.BoolVar(&overwrite, "overwrite", false, "allow restoring into a folder that already has files")

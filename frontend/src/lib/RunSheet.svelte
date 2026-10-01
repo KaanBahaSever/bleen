@@ -63,6 +63,7 @@
     if (job.phase === 'cancelled') return t('run.cancelled');
     if (job.phase === 'awaiting') return t('run.preflight');
     if (job.kind === 'restore') return t('run.restoring', { name: job.sourceName });
+    if (job.kind === 'export') return t('run.exporting', { name: job.sourceName });
     if (job.kind === 'verify') return t('run.verifyingAll');
     return t('run.backingUp', { name: job.sourceName || '…' });
   });
@@ -174,9 +175,9 @@
                   <p class="mt-1 text-[13px]">{errText(r.error?.code)}</p>
                 </div>
               {/if}
-            {:else if r.kind === 'restore'}
+            {:else if r.kind === 'restore' || r.kind === 'export'}
               {#if r.result === 'done'}
-                <p class="check"><Check size={16} />{t('run.restored', { n: fmtNumber(lang(), r.files) })} ({fmtSize(lang(), r.bytes)})</p>
+                <p class="check"><Check size={16} />{t(r.kind === 'export' ? 'run.exported' : 'run.restored', { n: fmtNumber(lang(), r.files) })} ({fmtSize(lang(), r.bytes)})</p>
                 <p class="ml-6 truncate font-mono text-[12px] text-muted">{t('run.restoredTo', { dest: r.dest ?? '' })}</p>
                 {#if r.verified}
                   <p class="check"><Check size={16} />{t('run.allVerified')}</p>
@@ -233,6 +234,8 @@
     {:else}
       {#if job.kind === 'restore' && job.dest && job.phase === 'done'}
         <button class="btn btn-secondary" onclick={() => api.OpenFolder(job.dest!)}>{t('common.openFolder')}</button>
+      {:else if job.kind === 'export' && job.dest && job.phase === 'done'}
+        <button class="btn btn-secondary" onclick={() => api.OpenFolder(job.dest!)}>{t('common.showFile')}</button>
       {:else if job.kind === 'backup' && store.state?.vault?.path}
         <button class="btn btn-secondary" onclick={() => api.OpenFolder(store.state!.vault!.path)}>{t('run.openBackup')}</button>
       {/if}

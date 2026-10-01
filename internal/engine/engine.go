@@ -25,6 +25,9 @@ const (
 	EFileUnstable      = "E_FILE_UNSTABLE"
 	ERenamed           = "E_RENAMED"
 	ETooLarge          = "E_TOO_LARGE"
+	EWriteFailed       = "E_WRITE_FAILED"
+	EDestExists        = "E_DEST_EXISTS"
+	EDestInVault       = "E_DEST_IN_VAULT"
 )
 
 // Error is a run-level failure with a stable code.

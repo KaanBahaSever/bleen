@@ -181,9 +181,6 @@ func Create(root, label, createdBy, password string) (*Vault, error) {
 	if err := writeFileExcl(sys(root, metaFile), b); err != nil {
 		return nil, err
 	}
-	if err := writeFileSync(filepath.Join(root, "README.txt"), []byte(vaultReadme)); err != nil {
-		return nil, err
-	}
 	v, err := Open(root, OpenOptions{Key: key})
 	if err != nil {
 		return nil, err
@@ -198,6 +195,10 @@ func Create(root, label, createdBy, password string) (*Vault, error) {
 // Open locks the vault, loads a working copy of its catalog and repairs
 // anything an interrupted run left behind.
 func Open(root string, opt OpenOptions) (*Vault, error) {
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return nil, err
+	}
 	meta, err := ReadMeta(root)
 	if err != nil {
 		return nil, err
@@ -731,28 +732,3 @@ func copyFile(src, dst string) error {
 	}
 	return out.Close()
 }
-
-const vaultReadme = `This folder contains backups made by bleen.
-Bu klasör bleen ile alınmış yedekleri içerir.
-
-Each subfolder is one backed-up location. Every backup is a normal ZIP file.
-Her alt klasör yedeklenen bir konumdur. Her yedek normal bir ZIP dosyasıdır.
-
-To restore without bleen / bleen olmadan geri yüklemek için:
- 1. Extract the newest *_FULL.zip file.     En yeni *_FULL.zip dosyasını çıkarın.
- 2. For each later *_INCREMENTAL.zip, in name order (oldest first):
-    Sonraki her *_INCREMENTAL.zip için, ad sırasıyla (eskiden yeniye):
-    a. extract it, overwriting files           üzerine yazarak çıkarın,
-    b. then delete the files listed in its DELETED.txt
-       ardından içindeki DELETED.txt'de yazan dosyaları silin.
-
-Encrypted backups end with .zip.age. Open them with the free "age" tool
-(https://age-encryption.org) and your password:
-Şifreli yedekler .zip.age ile biter. Ücretsiz "age" aracı ve parolanla açılır:
-   age -d .bleen/identity.age > key.txt        (asks for the password / parolayı sorar)
-   age -d -i key.txt FILE.zip.age > FILE.zip
-Delete key.txt afterwards. / Sonra key.txt dosyasını sil.
-
-Do not rename or edit files in the .bleen folder.
-.bleen klasöründeki dosyaları değiştirmeyin.
-`

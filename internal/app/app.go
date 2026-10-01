@@ -922,20 +922,29 @@ func (a *App) findSnapshot(sourceID, backupID string) (*catalog.Source, *catalog
 // OpenFolder shows a folder in the system file manager.
 func (a *App) OpenFolder(path string) error { return platform.Reveal(path) }
 
-// SuggestRestoreFolder proposes a new folder next to the user's Desktop.
+// SuggestRestoreFolder proposes a new folder on the user's Desktop.
 func (a *App) SuggestRestoreFolder(name string, at time.Time) string {
+	return suggestPath(name, at, "")
+}
+
+// SuggestExportFile proposes a new ZIP file on the user's Desktop.
+func (a *App) SuggestExportFile(name string, at time.Time) string {
+	return suggestPath(name, at, ".zip")
+}
+
+func suggestPath(name string, at time.Time, ext string) string {
 	home, _ := os.UserHomeDir()
 	base := filepath.Join(home, "Desktop")
 	if _, err := os.Stat(base); err != nil {
 		base = home
 	}
 	n := vault.SafeFolderName(name + " (" + at.Local().Format("2006-01-02 1504") + ")")
-	p := filepath.Join(base, n)
+	p := filepath.Join(base, n+ext)
 	for i := 2; ; i++ {
-		if _, err := os.Stat(p); err != nil {
+		if _, err := os.Lstat(p); err != nil {
 			return p
 		}
-		p = filepath.Join(base, n+" "+strconv.Itoa(i))
+		p = filepath.Join(base, n+" "+strconv.Itoa(i)+ext)
 	}
 }
 

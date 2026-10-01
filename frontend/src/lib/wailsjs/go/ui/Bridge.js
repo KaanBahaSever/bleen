@@ -38,6 +38,10 @@ export function ChooseFolder(arg1, arg2) {
   return window['go']['ui']['Bridge']['ChooseFolder'](arg1, arg2);
 }
 
+export function ChooseZipFile(arg1, arg2) {
+  return window['go']['ui']['Bridge']['ChooseZipFile'](arg1, arg2);
+}
+
 export function ConfirmPlan(arg1) {
   return window['go']['ui']['Bridge']['ConfirmPlan'](arg1);
 }
@@ -52,6 +56,10 @@ export function DismissNotice() {
 
 export function Drives() {
   return window['go']['ui']['Bridge']['Drives']();
+}
+
+export function Export(arg1, arg2, arg3, arg4) {
+  return window['go']['ui']['Bridge']['Export'](arg1, arg2, arg3, arg4);
 }
 
 export function ExportReport(arg1) {
@@ -124,6 +132,10 @@ export function SetRetention(arg1, arg2) {
 
 export function SetTheme(arg1) {
   return window['go']['ui']['Bridge']['SetTheme'](arg1);
+}
+
+export function SuggestExportFile(arg1, arg2) {
+  return window['go']['ui']['Bridge']['SuggestExportFile'](arg1, arg2);
 }
 
 export function SuggestRestoreFolder(arg1, arg2) {

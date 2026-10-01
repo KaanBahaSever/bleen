@@ -128,14 +128,14 @@
       <h1 data-t="hero.title" data-html>Kolay <span class="b">yedekleme</span>.</h1>
       <p data-t="hero.sub">Klasörlerini harici bir diske yedekler. İstediğin günün kopyasını geri yükler.</p>
       <div class="cta">
-        <a class="btn btn-primary" href="https://github.com/kaanbahasever/bleen/releases/download/v0.2.0-beta.1/bleen-windows-amd64.exe">
+        <a class="btn btn-primary" href="https://github.com/kaanbahasever/bleen/releases/download/v0.3.0-beta.1/bleen-windows-amd64.exe">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14"/></svg>
           <span data-t="cta.download">Windows için indir</span>
         </a>
         <a class="btn btn-secondary" href="https://github.com/kaanbahasever/bleen" data-t="cta.source">Kaynak kod</a>
       </div>
-      <div><span class="beta">beta · v0.2.0-beta.1</span></div>
-      <p class="small" data-t="cta.more" data-html>Windows 10/11 · <a href="https://github.com/kaanbahasever/bleen/releases/download/v0.2.0-beta.1/bleen-windows7-8-amd64.exe">Windows 7/8.1 sürümü</a> · <a href="https://github.com/kaanbahasever/bleen/releases">Tüm sürümler</a></p>
+      <div><span class="beta">beta · v0.3.0-beta.1</span></div>
+      <p class="small" data-t="cta.more" data-html>Windows 10/11 · <a href="https://github.com/kaanbahasever/bleen/releases/download/v0.3.0-beta.1/bleen-windows7-8-amd64.exe">Windows 7/8.1</a> · <a href="https://github.com/kaanbahasever/bleen/releases/download/v0.3.0-beta.1/bleen-macos-universal.zip">macOS</a> · <a href="https://github.com/kaanbahasever/bleen/releases/download/v0.3.0-beta.1/bleen-linux-amd64.tar.gz">Linux</a> · <a href="https://github.com/kaanbahasever/bleen/releases">Tüm sürümler</a></p>
 
       <div class="shot"><div class="bar"><i></i><i></i><i></i></div><img data-img="home" src="img/home-tr.png" alt="bleen ana ekranı" width="1620" height="1080"></div>
     </div>
@@ -166,7 +166,7 @@
         <div class="step"><h3 data-t="s1.h">Klasörü ve diski seç</h3><p data-t="s1.p">Yedeklenecek klasörü ve yedeklerin kaydedileceği diski seç.</p></div>
         <div class="step"><h3 data-t="s2.h">Yedekle</h3><p data-t="s2.p">bleen değişiklikleri listeler. Onaylarsın; dosyalar kopyalanır ve doğrulanır.</p>
           <div class="timeline"><span><span class="dot full"></span>FULL</span><span><span class="dot"></span>+52</span><span><span class="dot"></span>+18</span><span><span class="dot"></span>+347</span></div></div>
-        <div class="step"><h3 data-t="s3.h">Geri yükle</h3><p data-t="s3.p">Bir tarih seç. Klasör o tarihteki haliyle geri yüklenir.</p></div>
+        <div class="step"><h3 data-t="s3.h">Geri yükle</h3><p data-t="s3.p">Bir tarih seç. Klasörü o günkü haliyle geri yükle ya da tek bir ZIP dosyası olarak kaydet.</p></div>
       </div>
       <div class="pair" style="margin-top:24px">
         <div class="shot"><div class="bar"><i></i><i></i><i></i></div><img data-img="running" src="img/running-tr.png" alt="" width="1620" height="1080" loading="lazy"></div>
@@ -178,8 +178,8 @@
       <h2 data-t="q.title">Sık sorulan sorular</h2>
       <p class="lead"></p>
       <details><summary data-t="q1.q">bleen arka planda çalışır mı?</summary><p data-t="q1.a">Hayır. Pencere kapandığında bleen de kapanır. Otomatik yedeklemeyi açarsan Windows, bleen'i günde bir kez çalıştırır.</p></details>
-      <details><summary data-t="q2.q">Yedeklerimi bleen olmadan açabilir miyim?</summary><p data-t="q2.a">Evet. Önce FULL dosyasını, sonra INCREMENTAL dosyalarını tarih sırasıyla aynı klasöre çıkar. Ardından her arşivdeki DELETED.txt dosyasında listelenen dosyaları sil. Bu adımlar yedek diskindeki README.txt dosyasında da yazar.</p></details>
-      <details><summary data-t="q3.q">Hangi sistemlerde çalışır?</summary><p data-t="q3.a">Windows 10 ve 11. Windows 7 ve 8.1 için ayrı bir sürüm vardır; bu sürüm WebView2 çalışma zamanı gerektirir. Komut satırı aracı bleenctl Windows, macOS ve Linux'ta çalışır.</p></details>
+      <details><summary data-t="q2.q">Yedeklerimi bleen olmadan açabilir miyim?</summary><p data-t="q2.a">Evet. Önce FULL dosyasını, sonra INCREMENTAL dosyalarını tarih sırasıyla aynı klasöre çıkar. Ardından her arşivdeki DELETED.txt dosyasında listelenen dosyaları sil. Tek bir dosya lazımsa onu bulunduğu ZIP'ten çıkarman yeterli.</p></details>
+      <details><summary data-t="q3.q">Hangi sistemlerde çalışır?</summary><p data-t="q3.a">Windows 10 ve 11, macOS ve Linux. Windows 7 ve 8.1 için ayrı bir sürüm vardır; bu sürüm WebView2 çalışma zamanı gerektirir. macOS ve Linux sürümleri henüz yeni; sorun görürsen bildir.</p></details>
       <details><summary data-t="q4.q">Parolamı unutursam ne olur?</summary><p data-t="q4.a">Şifreli yedekler açılamaz. Parolayı kurtarmanın bir yolu yoktur; güvenli bir yerde sakla.</p></details>
       <details><summary data-t="q5.q">Ücretli mi?</summary><p data-t="q5.a">Hayır. bleen ücretsiz ve açık kaynaktır (Apache-2.0). İnternete veri göndermez.</p></details>
     </section>
@@ -198,7 +198,7 @@ const T = {
     'hero.title': 'Easy <span class="b">backups</span>.',
     'hero.sub': 'Backs up your folders to an external drive. Restores them as they were on any day.',
     'cta.download': 'Download for Windows', 'cta.source': 'Source code',
-    'cta.more': 'Windows 10/11 · <a href="https://github.com/kaanbahasever/bleen/releases/download/v0.2.0-beta.1/bleen-windows7-8-amd64.exe">Windows 7/8.1 edition</a> · <a href="https://github.com/kaanbahasever/bleen/releases">All releases</a>',
+    'cta.more': 'Windows 10/11 · <a href="https://github.com/kaanbahasever/bleen/releases/download/v0.3.0-beta.1/bleen-windows7-8-amd64.exe">Windows 7/8.1</a> · <a href="https://github.com/kaanbahasever/bleen/releases/download/v0.3.0-beta.1/bleen-macos-universal.zip">macOS</a> · <a href="https://github.com/kaanbahasever/bleen/releases/download/v0.3.0-beta.1/bleen-linux-amd64.tar.gz">Linux</a> · <a href="https://github.com/kaanbahasever/bleen/releases">All releases</a>',
     'f.title': 'Features', 'f.lead': 'No installation, no account.',
     'f1.h': 'Incremental backups', 'f1.p': 'The first backup copies every file. Later backups copy only new and changed files.',
     'f2.h': 'Standard ZIP', 'f2.p': 'Backups are regular ZIP files. You can open them without bleen.',
@@ -209,11 +209,11 @@ const T = {
     'h.title': 'How it works', 'h.lead': 'Each backup creates one ZIP file. Only the latest version of each changed file is stored.',
     's1.h': 'Choose a folder and a drive', 's1.p': 'Select the folder to back up and the drive to store the backups on.',
     's2.h': 'Back up', 's2.p': 'bleen lists the changes. You confirm; the files are copied and verified.',
-    's3.h': 'Restore', 's3.p': 'Pick a date. The folder is restored as it was on that date.',
+    's3.h': 'Restore', 's3.p': 'Pick a date. Restore the folder as it was that day, or save it as one ZIP file.',
     'q.title': 'FAQ',
     'q1.q': 'Does bleen run in the background?', 'q1.a': 'No. bleen quits when you close its window. If you turn on automatic backups, Windows starts bleen once a day.',
-    'q2.q': 'Can I open my backups without bleen?', 'q2.a': 'Yes. Extract the FULL file first, then the INCREMENTAL files in date order into the same folder. Then delete the files listed in each archive's DELETED.txt. The README.txt file on the backup drive lists these steps too.',
-    'q3.q': 'Which systems are supported?', 'q3.a': 'Windows 10 and 11. A separate edition supports Windows 7 and 8.1; it requires the WebView2 runtime. The bleenctl command-line tool runs on Windows, macOS and Linux.',
+    'q2.q': 'Can I open my backups without bleen?', 'q2.a': 'Yes. Extract the FULL file first, then the INCREMENTAL files in date order into the same folder. Then delete the files listed in each archive's DELETED.txt. If you need just one file, extract it from the ZIP that holds it.',
+    'q3.q': 'Which systems are supported?', 'q3.a': 'Windows 10 and 11, macOS and Linux. A separate edition supports Windows 7 and 8.1; it requires the WebView2 runtime. The macOS and Linux apps are new; please report any problems.',
     'q4.q': 'What if I forget my password?', 'q4.a': 'Encrypted backups cannot be opened. There is no way to recover the password, so keep it somewhere safe.',
     'q5.q': 'Is it free?', 'q5.a': 'Yes. bleen is free and open source (Apache-2.0). It sends no data over the internet.',
     'footer': 'bleen · Apache-2.0 · <a href="https://github.com/kaanbahasever/bleen">GitHub</a>',

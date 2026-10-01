@@ -1,13 +1,29 @@
 # Changelog
 
-## 0.2.0-beta.2
+## 0.3.0-beta.1
 
-Safety release after a full review. Please update. / Kapsamlı incelemenin ardından güvenlik sürümü; lütfen güncelleyin.
+Big update after a full review, with many data-safety fixes. Please update. / Kapsamlı incelemenin ardından büyük güncelleme; birçok veri güvenliği düzeltmesi içerir. Lütfen güncelleyin.
 
-- **New:** macOS (`bleen-macos-universal.zip`) and Linux (`bleen-linux-amd64.tar.gz`) desktop apps; connect to a network share with a user name and password (Windows)
+**Downloads / İndirmeler**
+
+| File | For |
+|---|---|
+| `bleen-windows-amd64.exe` | Windows 10/11 |
+| `bleen-windows7-8-amd64.exe` | Windows 7/8.1 (needs the WebView2 runtime, version 109) |
+| `bleen-macos-universal.zip` | macOS 12+ (Intel and Apple Silicon) |
+| `bleen-linux-amd64.tar.gz` | Linux (GTK 3, WebKitGTK 4.1) |
+| `bleenctl-*` | Command-line tool |
+
+Not code-signed yet: Windows SmartScreen may warn ("More info" → "Run anyway"); on macOS, right-click the app → Open the first time.
+Henüz imzalı değil: Windows SmartScreen uyarabilir ("Ek bilgi" → "Yine de çalıştır"); macOS'ta ilk seferde uygulamaya sağ tıklayıp "Aç"ı seç.
+
+- **New:** save any day (everything or chosen files) as one ZIP file, from the History screen or with `bleenctl restore --zip`; `bleenctl restore --only` restores chosen files and folders
+- **New:** macOS and Linux desktop apps; connect to a network share with a user name and password (Windows); optional automatic backup on macOS (launchd) and Linux (systemd)
+- **Changed:** no more README.txt files in the archives or on the backup disk
 - **Fixed (data):** moved files are stored again, so hand restores are complete; an unreadable or online-only (OneDrive) file is never recorded as deleted; OneDrive files are backed up; full backups get the empty-folder and mass-change guards; old backups are kept while the newest full backup skipped files; FAT32 disks no longer fail on very large files
-- **Fixed (disk):** an unreadable catalog is never silently replaced; a stale lock from a crashed bleen is removed; a different bleen disk at the same drive letter is detected; recovery works for folder names with [ ]
+- **Fixed (disk):** an unreadable catalog is never silently replaced; a stale lock from a crashed bleen is removed; a different bleen disk at the same drive letter is detected; recovery works for folder names with [ ]; nothing can be restored into the backup folder itself
 - **Fixed (app):** the quit dialog's Yes/No; "Restore latest state" restores the latest backup; a double click can't approve the next warning; messages no longer say "verified" when there were problems
+- **Tests:** every day of a month of random changes is restored by id, by date, as a ZIP, partly, and by hand with an unzip tool, on plain, encrypted, split and pruned disks, before and after rebuilding the catalog; a damaged archive never restores wrong data
 
 ## 0.2.0-beta.1
 

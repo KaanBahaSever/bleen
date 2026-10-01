@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"syscall"
 
 	"golang.org/x/sys/windows"
 )
@@ -128,7 +129,16 @@ func VolumeLabel(dir string) string {
 }
 
 // Reveal opens a folder in Explorer.
-func Reveal(path string) error { return exec.Command("explorer.exe", path).Start() }
+func Reveal(path string) error {
+	if fi, err := os.Stat(path); err == nil && !fi.IsDir() {
+		// Show the file selected in its folder. Explorer wants the quotes
+		// after the comma, so the command line is built by hand.
+		cmd := exec.Command("explorer.exe")
+		cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: `explorer.exe /select,"` + path + `"`}
+		return cmd.Start()
+	}
+	return exec.Command("explorer.exe", path).Start()
+}
 
 // UILanguage returns the user's preferred UI language, e.g. "tr-TR".
 func UILanguage() string {

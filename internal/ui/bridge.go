@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"path/filepath"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -81,6 +82,30 @@ func (b *Bridge) SuggestRestoreFolder(name, at string) string {
 		t = time.Now()
 	}
 	return b.a.SuggestRestoreFolder(name, t)
+}
+
+// Export saves a backup (or some of its files) as one ZIP file.
+func (b *Bridge) Export(sourceID, backupID, dest string, paths []string) (string, error) {
+	return b.a.Export(sourceID, backupID, dest, paths)
+}
+
+// SuggestExportFile proposes a new ZIP file; at is an RFC 3339 time.
+func (b *Bridge) SuggestExportFile(name, at string) string {
+	t, err := time.Parse(time.RFC3339Nano, at)
+	if err != nil {
+		t = time.Now()
+	}
+	return b.a.SuggestExportFile(name, t)
+}
+
+// ChooseZipFile shows the native save dialog. It returns "" if cancelled.
+func (b *Bridge) ChooseZipFile(title, suggested string) (string, error) {
+	return runtime.SaveFileDialog(b.ctx, runtime.SaveDialogOptions{
+		Title:            title,
+		DefaultDirectory: filepath.Dir(suggested),
+		DefaultFilename:  filepath.Base(suggested),
+		Filters:          []runtime.FileFilter{{DisplayName: "ZIP", Pattern: "*.zip"}},
+	})
 }
 func (b *Bridge) CheckBackups() (string, error) { return b.a.CheckBackups() }
 func (b *Bridge) Activity() []app.RunRecord     { return b.a.Activity() }

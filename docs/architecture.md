@@ -109,7 +109,7 @@ In Nelson Goodman's *new riddle of induction* (1955), **"bleen"** is a made-up c
 ### 1.2 Core tenets
 
 1. **Local-first and private.** No account, no cloud and no telemetry. bleen only talks to the folders you point it at.
-2. **Your files, not our format.** Backups are plain ZIP files with a `README.txt` beside them. If bleen disappeared tomorrow, Explorer or 7-Zip could still restore everything.
+2. **Your files, not our format.** Backups are plain ZIP files. If bleen disappeared tomorrow, Explorer or 7-Zip could still restore everything.
 3. **Nothing happens behind your back.** bleen runs only while its window is open. It installs no services, no startup entries, no tray icon and no scheduled tasks. Automation will only ever be an explicit opt-in.
 4. **Never make things worse.** The vault is append-mostly, commits are atomic, and nothing is trusted until it is verified. A failed or cancelled run leaves every earlier backup untouched.
 5. **Zero friction.** Three steps to the first backup. Plain language ("Back up changes", not "Run incremental job"). Sensible defaults everywhere.
@@ -413,7 +413,6 @@ func (p *Pipeline) Run(ctx context.Context, tasks <-chan Task, w *archive.Writer
 │   ├── dosya2.xlsx
 │   └── klasor/resim.jpg
 ├── DELETED.txt               plain list of paths deleted since the previous backup
-├── README.txt                what this file is and how to restore it without bleen
 └── bleen-manifest.json       machine-readable, authoritative (§4.6)
 ```
 
@@ -421,9 +420,9 @@ func (p *Pipeline) Run(ctx context.Context, tasks <-chan Task, w *archive.Writer
 - **ZIP64** switches on automatically for archives > 4 GiB or > 65,535 entries.
 - **Modification times** are stored in the extended-timestamp extra field and restored.
 - **Split archives on FAT32.** Many USB sticks ship as FAT32, which has a **4 GiB file-size limit**. bleen detects the target filesystem and rolls to `…_FULL.part02.zip` and so on at 3.9 GiB. **Every part is a complete, standalone ZIP**, not a spanned archive, so any tool can open any part. Onboarding recommends exFAT (§5.4).
-- **Moved or copied files** (§3.3.2) appear in the manifest as references to the archive and entry that already hold the bytes.
+- **Moved or copied files** (§3.3.2) are stored again under their new path, so extracting the archives by hand gives complete folders. The one exception is a file whose date changed but whose content did not: an incremental records it as a reference to the bytes already stored for the same path. A full backup always stores every file.
 
-**Restoring without bleen** (also written in `README.txt`, in Turkish and English): *extract the FULL archive, then each INCREMENTAL in date order and overwrite when asked, then delete the paths listed in each `DELETED.txt`.*
+**Restoring without bleen** (also on the website's FAQ): *extract the FULL archive, then each INCREMENTAL in date order and overwrite when asked, then delete the paths listed in each `DELETED.txt`.*
 
 #### 3.3.6 Verification (FR-16)
 
@@ -468,7 +467,8 @@ The catalog is edited as a **working copy in local app data**, which is fast and
 5. Report: *"✓ 10,003 files restored to D:\Restore\Proje · all verified"*.
 
 - **Restore latest** (FR-12) is the same operation with `S` set to the newest snapshot.
-- **Default destination** is a **new, empty folder** (`…\_proje (restored 2026-09-27)`). Restoring over the original location needs an explicit choice (*overwrite*, *keep both*, or *skip existing*) and a confirmation.
+- **Destination** is a **new, empty folder** (`…\_proje (2026-09-27 1800)` on the Desktop by default). The app refuses a folder that already has files and a folder inside the vault; `bleenctl restore --overwrite` allows a non-empty folder. A restore never deletes anything at the destination.
+- **Export as one ZIP** is the same operation with a different writer: the resolved files go into one new ZIP (paths relative to the source folder, original dates). Compressed data is copied as is, after each file's SHA-256 is checked. The ZIP is written as `name.zip.partial` and renamed at the end, so a cancelled export leaves nothing. It is never encrypted, even from an encrypted vault, and the app says so.
 - **Path safety.** Entries with `..`, absolute paths or drive letters are rejected (zip-slip). Names that are illegal on the target OS, such as `CON`, `aux.txt` or trailing dots on Windows, are escaped, and the report lists them.
 
 #### 3.3.9 Generations and retention (v0.3)
@@ -510,7 +510,6 @@ The **vault** is the bleen folder on the target disk. The layout keeps the draft
 
 ```
 E:\bleen\
-├── README.txt                      how to restore without bleen (TR + EN)
 ├── _proje\
 │   ├── 2026-09-25_1830_FULL.zip
 │   ├── 2026-09-26_1800_INCREMENTAL.zip
@@ -1376,7 +1375,7 @@ type Automation interface {
 - Each vault gets an **age X25519 key pair**. The **public recipient** is stored in `vault.json`. The **private identity** is encrypted with the user's passphrase (age scrypt) and stored in `.bleen/identity.age`.
 - **Backups need only the public key**, so a backup never asks for the passphrase. Only **restores** need it. This also keeps future unattended runs safe.
 - Archives become `…_INCREMENTAL.zip.age`. The vault catalog is encrypted to the same recipient. The local hash cache stays plaintext, because it lives on the machine that already has the files.
-- **Recovery without bleen:** `age -d identity.age > id.txt` (asks for the passphrase), then `age -d -i id.txt file.zip.age > file.zip`. This is written in the vault README.
+- **Recovery without bleen:** `age -d identity.age > id.txt` (asks for the passphrase), then `age -d -i id.txt file.zip.age > file.zip`. This is documented on the website and in this file.
 - A **Recovery Kit** (printable PDF) contains the vault ID, the steps above, and a box to write the passphrase by hand. There is no backdoor: a lost passphrase means lost backups, and the UI says so plainly before encryption is turned on.
 
 ### 8.4 Reliability checklist
@@ -1507,7 +1506,8 @@ bleenctl backup --source '\\SERVER\Root\_proje' --vault 'E:\bleen'
 ```
 
 ```bash
-bleenctl restore --source _proje --at 2026-09-27 --to 'D:\Restore\Proje'
+bleenctl restore _proje --at 2026-09-27 --to 'D:\Restore\Proje' --vault 'E:\bleen'
+bleenctl restore _proje --at 2026-09-27 --zip 'D:\proje-0927.zip' --vault 'E:\bleen'
 ```
 
 **Conventions:** Conventional Commits; SemVer for the app and a separate version for the on-disk format; `CHANGELOG.md` generated at release; `main` is always releasable; features merge behind small PRs with tests.
@@ -1529,7 +1529,7 @@ bleenctl restore --source _proje --at 2026-09-27 --to 'D:\Restore\Proje'
 
 ---
 
-**Status (2026-09-29).** `v0.2.0-beta.1` ships M1, v0.1 and most of v0.2 to v0.5: retention and automatic full backups, age encryption, disk rotation, pause/resume, HTML reports, and the opt-in scheduled backup (Windows Task Scheduler). A Windows 7/8.1 edition is built with the patched Go toolchain from XTLS/go-win7. Not yet done: macOS/Linux desktop packages, native SMB, VSS, zstd, tray, code signing.
+**Status (2026-10-01).** `v0.3.0-beta.1` ships M1, v0.1 and most of v0.2 to v0.5: retention and automatic full backups, age encryption, disk rotation, pause/resume, HTML reports, export of any day as one ZIP, and the opt-in scheduled backup (Windows Task Scheduler, launchd, systemd). Desktop apps for Windows 10/11, Windows 7/8.1 (patched Go toolchain from XTLS/go-win7), macOS and Linux. Not yet done: native SMB on macOS/Linux, VSS, zstd, tray, code signing.
 
 ## 12. Open-source readiness
 

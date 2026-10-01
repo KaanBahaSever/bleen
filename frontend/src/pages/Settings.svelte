@@ -198,32 +198,6 @@
 {/if}
 
 <style>
-  .seg {
-    display: inline-flex;
-    padding: 3px;
-    border-radius: 10px;
-    background: var(--surface-2);
-  }
-  .seg button {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: 28px;
-    padding: 0 10px;
-    border-radius: 8px;
-    border: 0;
-    background: none;
-    color: var(--muted);
-    font: inherit;
-    font-size: 13px;
-    cursor: pointer;
-  }
-  .seg button.on {
-    background: var(--surface);
-    color: var(--text);
-    box-shadow: var(--shadow-sm);
-    font-weight: 600;
-  }
   button:not(.btn):not(.seg button) {
     background: none;
     border: 0;
