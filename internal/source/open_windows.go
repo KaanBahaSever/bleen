@@ -59,3 +59,13 @@ func isCloudPlaceholder(fi fs.FileInfo) bool {
 	}
 	return d.FileAttributes&(fileAttributeOffline|fileAttributeRecallOnOpen|fileAttributeRecallOnDataAccess) != 0
 }
+
+// irregularIsFile reports whether an irregular entry is a plain file with a
+// non-link reparse tag (cloud sync), rather than a junction or device.
+func irregularIsFile(fi fs.FileInfo) bool {
+	d, ok := fi.Sys().(*syscall.Win32FileAttributeData)
+	if !ok {
+		return false
+	}
+	return d.FileAttributes&syscall.FILE_ATTRIBUTE_DIRECTORY == 0 && d.FileAttributes&syscall.FILE_ATTRIBUTE_REPARSE_POINT != 0
+}

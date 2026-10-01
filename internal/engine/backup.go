@@ -110,17 +110,22 @@ func Backup(ctx context.Context, v *vault.Vault, src *source.LocalFS, opt Backup
 
 	snap := archive.SnapshotInfo{ID: uuid.NewString(), Kind: "full", Generation: 1, StartedAt: began.UTC()}
 	state := map[string]catalog.Version{}
+	// last is the most recent known state, even when this run starts a new
+	// generation: the safety guards compare against it so that full backups
+	// (and the retention that follows them) are protected too.
+	var last map[string]catalog.Version
 	plan := &Plan{SourceName: info.Name, Origin: origin, Kind: "full"}
 	if latest != nil {
 		plan.LastBackup = latest.FinishedAt
+		if last, err = v.Catalog.CurrentState(row.ID, latest.GenerationID); err != nil {
+			return nil, err
+		}
 		if opt.Full || (opt.AutoFullEvery > 0 && latest.Seq+1 >= opt.AutoFullEvery) {
 			snap.Generation = latest.Generation + 1
 		} else {
 			snap.Kind, plan.Kind = "incremental", "incremental"
 			snap.Generation, snap.Seq = latest.Generation, latest.Seq+1
-			if state, err = v.Catalog.CurrentState(row.ID, latest.GenerationID); err != nil {
-				return nil, err
-			}
+			state = last
 		}
 		if snaps, err := v.Catalog.Snapshots(row.ID); err == nil {
 			for _, s := range snaps {
@@ -134,7 +139,7 @@ func Backup(ctx context.Context, v *vault.Vault, src *source.LocalFS, opt Backup
 	// Scan.
 	entries := map[string]source.Entry{}
 	var issues []archive.Issue
-	var badDirs []string
+	var bad []string // paths that could not be read: never recorded as deleted
 	seen := 0
 	err = src.Walk(ctx, func(e source.Entry) {
 		entries[e.Path] = e
@@ -144,7 +149,7 @@ func Backup(ctx context.Context, v *vault.Vault, src *source.LocalFS, opt Backup
 			}
 		}
 	}, func(wi source.WalkIssue) {
-		badDirs = append(badDirs, wi.Path+"/")
+		bad = append(bad, wi.Path)
 		issues = append(issues, archive.Issue{Path: wi.Path, Code: wi.Code, Message: wi.Err.Error()})
 	})
 	if err != nil {
@@ -156,11 +161,13 @@ func Backup(ctx context.Context, v *vault.Vault, src *source.LocalFS, opt Backup
 	prog.Scanning(seen)
 
 	// Diff.
-	stateFiles := 0
-	for _, s := range state {
-		if s.Kind == archive.KindFile {
-			stateFiles++
+	unreadable := func(p string) bool {
+		for _, b := range bad {
+			if p == b || strings.HasPrefix(p, b+"/") {
+				return true
+			}
 		}
+		return false
 	}
 	var tasks []task
 	var meta []archive.Entry
@@ -190,16 +197,42 @@ func Backup(ctx context.Context, v *vault.Vault, src *source.LocalFS, opt Backup
 			}
 		}
 	}
+	caseless := source.CaseInsensitive()
+	lower := map[string]bool{}
+	if caseless {
+		for p := range entries {
+			lower[strings.ToLower(p)] = true
+		}
+	}
 	for p, prev := range state {
-		if _, ok := entries[p]; ok || underAny(p, badDirs) {
+		if _, ok := entries[p]; ok || unreadable(p) {
 			continue
 		}
-		meta = append(meta, archive.Entry{Op: archive.OpDeleted, Path: p, Kind: prev.Kind})
+		e := archive.Entry{Op: archive.OpDeleted, Path: p, Kind: prev.Kind}
+		// A rename that only changes letter case ("Docs" to "docs"): the new
+		// name is in this backup, so extracting by hand must not delete it.
+		e.KeepOnDisk = caseless && lower[strings.ToLower(p)]
+		meta = append(meta, e)
 		if prev.Kind == archive.KindFile {
 			plan.Deleted++
 		}
 	}
-	if stateFiles > 0 && plan.TotalFiles == 0 {
+
+	// Safety guards, measured against the last known state.
+	lastFiles, lastChanged := 0, 0
+	for p, l := range last {
+		if l.Kind != archive.KindFile {
+			continue
+		}
+		lastFiles++
+		e, ok := entries[p]
+		switch {
+		case unreadable(p):
+		case !ok, e.Size != l.Size, e.ModTime.UnixNano() != l.MTimeNS:
+			lastChanged++
+		}
+	}
+	if lastFiles > 0 && plan.TotalFiles == 0 {
 		return nil, errorf(ESourceEmpty, nil,
 			"%s looks empty. If the server or folder is disconnected, nothing is recorded; check it and try again", origin)
 	}
@@ -208,9 +241,9 @@ func Backup(ctx context.Context, v *vault.Vault, src *source.LocalFS, opt Backup
 	}
 	plan.EstStored = int64(float64(plan.BytesToRead) * 0.7)
 	plan.ScanIssues = len(issues)
-	if stateFiles > 0 {
-		plan.ChangedRatio = float64(plan.Modified+plan.Deleted) / float64(stateFiles)
-		plan.MassChange = stateFiles >= 20 && plan.ChangedRatio > opt.MassChangeRatio
+	if lastFiles > 0 {
+		plan.ChangedRatio = float64(lastChanged) / float64(lastFiles)
+		plan.MassChange = lastFiles >= 20 && plan.ChangedRatio > opt.MassChangeRatio
 	}
 	plan.NothingToDo = len(tasks) == 0 && len(meta) == 0
 	if free, err := platform.FreeSpace(v.Root); err == nil {
@@ -232,7 +265,7 @@ func Backup(ctx context.Context, v *vault.Vault, src *source.LocalFS, opt Backup
 	} else if plan.MassChange && !opt.AllowMassChange {
 		return nil, errorf(EMassChange, nil,
 			"unusually many changes (%d of %d files changed or deleted); check the folder, then confirm to continue",
-			plan.Modified+plan.Deleted, stateFiles)
+			lastChanged, lastFiles)
 	}
 
 	release := platform.KeepAwake()
@@ -425,6 +458,13 @@ func store(w *archive.Writer, r result, rep *Report) error {
 		rep.FilesDeduped++
 		return nil
 	}
+	if !w.Fits(r.c.Blob.CompressedSize) {
+		is := archive.Issue{Path: e.Path, Code: ETooLarge,
+			Message: "the file is larger than this disk allows (FAT32: 4 GB per file); format the disk as exFAT or NTFS"}
+		w.AddIssue(is)
+		rep.Issues = append(rep.Issues, is)
+		return nil
+	}
 	data, err := r.c.Spool.Reader()
 	if err != nil {
 		return errorf(EVaultWrite, err, "spool")
@@ -521,17 +561,8 @@ func opFor(existed bool) archive.Op {
 	return archive.OpAdded
 }
 
-func underAny(p string, dirs []string) bool {
-	for _, d := range dirs {
-		if strings.HasPrefix(p, d) {
-			return true
-		}
-	}
-	return false
-}
-
-// archiveBase names an archive by local time; seconds are added when two
-// backups start in the same minute.
+// archiveBase names an archive by local time, always with seconds so that
+// names sort in time order ("…_180035_INCREMENTAL" after "…_180002_FULL").
 func archiveBase(dir string, t time.Time, kind string) string {
 	names := map[string]bool{}
 	if des, err := os.ReadDir(dir); err == nil {
@@ -547,24 +578,18 @@ func archiveBase(dir string, t time.Time, kind string) string {
 		}
 		return false
 	}
-	k := strings.ToUpper(kind)
-	for _, layout := range []string{"2006-01-02_1504", "2006-01-02_150405"} {
-		if base := t.Local().Format(layout) + "_" + k; !taken(base) {
-			return base
-		}
+	base := t.Local().Format("2006-01-02_150405") + "_" + strings.ToUpper(kind)
+	for n := 2; taken(base); n++ {
+		base = fmt.Sprintf("%s_%s_%d", t.Local().Format("2006-01-02_150405"), strings.ToUpper(kind), n)
 	}
-	for n := 2; ; n++ {
-		if base := fmt.Sprintf("%s_%s_%d", t.Local().Format("2006-01-02_150405"), k, n); !taken(base) {
-			return base
-		}
-	}
+	return base
 }
 
 // verifyNew checks a freshly written part from disk and returns the SHA-256
 // of the file as stored. Plain parts are re-read entry by entry. Sealed
-// parts are decrypted as a stream and must match, byte for byte, the ZIP
-// that was produced (whose entries were hashed from the source while
-// reading) — the plain ZIP is never written to the backup disk.
+// parts must decrypt, byte for byte, to the ZIP that was produced, and are
+// then also checked entry by entry from a temporary local copy (removed
+// right after); the plain ZIP never touches the backup disk.
 func verifyNew(v *vault.Vault, p archive.Part) ([]byte, error) {
 	if !p.Sealed {
 		return archive.VerifyPart(p.TempPath)
@@ -575,6 +600,18 @@ func verifyNew(v *vault.Vault, p archive.Part) ([]byte, error) {
 	}
 	if !bytes.Equal(plain, p.PlainSHA256) {
 		return nil, errors.New("decrypted archive differs from what was written")
+	}
+	f, err := os.CreateTemp("", "bleen-open-*.zip")
+	if err != nil {
+		return nil, err
+	}
+	f.Close()
+	defer os.Remove(f.Name())
+	if err := v.Key.DecryptFile(p.TempPath, f.Name()); err != nil {
+		return nil, err
+	}
+	if _, err := archive.VerifyPart(f.Name()); err != nil {
+		return nil, err
 	}
 	return archive.FileSHA256(p.TempPath)
 }

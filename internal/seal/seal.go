@@ -23,6 +23,7 @@ import (
 var (
 	ErrWrongPassword = errors.New("E_WRONG_PASSWORD")
 	ErrWeakPassword  = errors.New("E_WEAK_PASSWORD")
+	ErrKeyDamaged    = errors.New("E_KEY_DAMAGED")
 )
 
 // MinPasswordLen is the shortest password bleen accepts.
@@ -72,7 +73,7 @@ func Unlock(identityFile []byte, password string) (*Key, error) {
 		if errors.As(err, &nm) || strings.Contains(err.Error(), "incorrect passphrase") {
 			return nil, ErrWrongPassword
 		}
-		return nil, ErrWrongPassword
+		return nil, fmt.Errorf("%w: %v", ErrKeyDamaged, err)
 	}
 	b, err := io.ReadAll(r)
 	if err != nil {

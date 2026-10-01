@@ -15,9 +15,14 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/kaanbahasever/bleen/internal/archive"
 )
+
+// CaseInsensitive reports whether paths on this system ignore letter case
+// (Windows and, by default, macOS).
+func CaseInsensitive() bool { return runtime.GOOS != "linux" }
 
 // Entry is one filesystem entry, with a vault-style relative path
 // ("klasor/resim.jpg": forward slashes, no leading slash).
@@ -117,6 +122,14 @@ func (s *LocalFS) Walk(ctx context.Context, fn func(Entry), issue func(WalkIssue
 			if rel != "" {
 				child = rel + "/" + name
 			}
+			if !utf8.ValidString(name) {
+				issue(WalkIssue{Path: child, Code: "E_BAD_NAME", Err: errors.New("the file name is not valid text (UTF-8); rename it to back it up")})
+				continue
+			}
+			child = name
+			if rel != "" {
+				child = rel + "/" + name
+			}
 			isDir := de.IsDir()
 			if s.excl.Match(child, name, isDir) {
 				continue
@@ -141,7 +154,9 @@ func (s *LocalFS) Walk(ctx context.Context, fn func(Entry), issue func(WalkIssue
 				fn(Entry{Path: child, Kind: archive.KindDir, ModTime: info.ModTime()})
 				wg.Add(1)
 				go visit(child)
-			case mode.IsRegular():
+			case mode.IsRegular() || mode&fs.ModeIrregular != 0 && !isDir && irregularIsFile(info):
+				// Go reports files with cloud-sync reparse tags (OneDrive,
+				// iCloud, Dropbox) as irregular; they are ordinary files.
 				if isCloudPlaceholder(info) {
 					issue(WalkIssue{Path: child, Code: "E_CLOUD_PLACEHOLDER",
 						Err: errors.New("online-only cloud file; skipped so the backup does not download it")})
@@ -149,7 +164,9 @@ func (s *LocalFS) Walk(ctx context.Context, fn func(Entry), issue func(WalkIssue
 				}
 				fn(Entry{Path: child, Kind: archive.KindFile, Size: info.Size(), ModTime: info.ModTime()})
 			default:
-				// Junctions, devices, sockets: not followed, not stored.
+				// Junctions, devices, sockets: not followed, not stored, but
+				// reported so that nothing disappears silently.
+				issue(WalkIssue{Path: child, Code: "E_NOT_A_FILE", Err: errors.New("not a regular file or folder (junction, device or socket); skipped")})
 			}
 		}
 	}

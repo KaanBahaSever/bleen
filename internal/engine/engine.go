@@ -4,6 +4,8 @@ package engine
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/kaanbahasever/bleen/internal/archive"
@@ -22,6 +24,7 @@ const (
 	ENotFound          = "E_NOT_FOUND"
 	EFileUnstable      = "E_FILE_UNSTABLE"
 	ERenamed           = "E_RENAMED"
+	ETooLarge          = "E_TOO_LARGE"
 )
 
 // Error is a run-level failure with a stable code.
@@ -90,3 +93,17 @@ func (NopProgress) Planned(*Plan)        {}
 func (NopProgress) Copying(CopyProgress) {}
 func (NopProgress) Phase(string)         {}
 func (NopProgress) Issue(archive.Issue)  {}
+
+// CleanupTemp removes temporary files a killed bleen left behind (spools,
+// decrypted archives, catalog working copies). Only files older than a day
+// are touched, so another running bleen is never disturbed.
+func CleanupTemp() {
+	for _, pat := range []string{"bleen-spool-*", "bleen-open-*.zip", "bleen-catalog-*.db*"} {
+		files, _ := filepath.Glob(filepath.Join(os.TempDir(), pat))
+		for _, f := range files {
+			if fi, err := os.Stat(f); err == nil && time.Since(fi.ModTime()) > 24*time.Hour {
+				os.Remove(f)
+			}
+		}
+	}
+}

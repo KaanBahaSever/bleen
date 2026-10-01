@@ -65,6 +65,7 @@ type partWriter struct {
 	zw       *zip.Writer
 	manifest Manifest
 	files    int
+	overhead int64 // estimated central directory + manifest size
 }
 
 type countWriter struct {
@@ -127,13 +128,14 @@ func (w *Writer) openPart() error {
 func (w *Writer) AddMeta(e Entry) error {
 	if e.Kind == KindDir && e.Op != OpDeleted {
 		// A directory entry keeps empty folders when the ZIP is extracted by hand.
-		fh := &zip.FileHeader{Name: FilesPrefix + e.Path + "/", Method: zip.Store, Modified: e.MTime}
+		fh := &zip.FileHeader{Name: FilesPrefix + e.Path + "/", Method: zip.Store, Modified: e.MTime.Local()}
 		fh.SetMode(0o755 | fs.ModeDir)
 		if _, err := w.cur.zw.CreateHeader(fh); err != nil {
 			return err
 		}
 	}
 	w.cur.manifest.Entries = append(w.cur.manifest.Entries, e)
+	w.cur.overhead += entryOverhead(e.Path)
 	return nil
 }
 
@@ -145,7 +147,7 @@ func (w *Writer) AddIssue(is Issue) {
 // AddFile appends pre-compressed file data and records the entry. It returns
 // the part-relative archive name ("<final part name>") and the ZIP entry name.
 func (w *Writer) AddFile(e Entry, b Blob) (partIndex int, zipName string, err error) {
-	if w.maxPart > 0 && w.cur.files > 0 && w.cur.cw.n+b.CompressedSize+4096 > w.maxPart {
+	if w.maxPart > 0 && w.cur.files > 0 && w.cur.cw.n+w.cur.overhead+b.CompressedSize+w.reserve() > w.maxPart {
 		if err := w.closePart(false); err != nil {
 			return 0, "", err
 		}
@@ -176,7 +178,22 @@ func (w *Writer) AddFile(e Entry, b Blob) (partIndex int, zipName string, err er
 	e.Zip = zipName
 	w.cur.manifest.Entries = append(w.cur.manifest.Entries, e)
 	w.cur.files++
+	w.cur.overhead += entryOverhead(e.Path)
 	return w.cur.manifest.Part.Index, zipName, nil
+}
+
+// reserve is headroom for README, DELETED.txt and the ZIP end records:
+// 1 MiB, or a twentieth of very small part limits.
+func (w *Writer) reserve() int64 { return min(1<<20, w.maxPart/20) }
+
+// entryOverhead estimates what one entry adds to the central directory
+// (header + name + extra) and to the manifest JSON.
+func entryOverhead(path string) int64 { return int64(4*len(path) + 400) }
+
+// Fits reports whether a compressed entry of this size can be stored at
+// all, even alone in a fresh part (FAT32 parts are limited to 3.9 GiB).
+func (w *Writer) Fits(compressed int64) bool {
+	return w.maxPart <= 0 || compressed+w.reserve()+entryOverhead("") <= w.maxPart
 }
 
 // PartName returns the final file name of part idx given the final part count.
@@ -235,7 +252,7 @@ func (w *Writer) closePart(last bool) error {
 	p.manifest.Part.Last = last
 	var deleted []string
 	for _, e := range p.manifest.Entries {
-		if e.Op == OpDeleted {
+		if e.Op == OpDeleted && !e.KeepOnDisk {
 			deleted = append(deleted, e.Path)
 		}
 	}
@@ -297,7 +314,7 @@ func prepareRawHeader(fh *zip.FileHeader, mtime time.Time) {
 	if mtime.IsZero() {
 		mtime = time.Now()
 	}
-	fh.SetModTime(mtime) //nolint:staticcheck // sets the MS-DOS fields CreateRaw would otherwise leave empty
+	fh.SetModTime(mtime.Local()) //nolint:staticcheck // MS-DOS fields (local time) that CreateRaw would leave empty
 	var eb [9]byte
 	binary.LittleEndian.PutUint16(eb[0:], 0x5455) // extended timestamp
 	binary.LittleEndian.PutUint16(eb[2:], 5)
@@ -314,16 +331,18 @@ EN  This ZIP file was made by bleen (https://github.com/kaanbahasever/bleen).
     DELETED.txt   paths that were deleted since the previous backup
     bleen-manifest.json   exact details (sizes, dates, SHA-256)
 
-    To restore without bleen: extract the FULL archive, then every
-    INCREMENTAL archive in date order (overwrite when asked), and delete
-    the paths listed in each DELETED.txt.
+    To restore without bleen: extract the newest FULL archive. Then, for
+    each later INCREMENTAL archive in name order: extract it (overwrite
+    when asked), then delete the paths listed in its DELETED.txt, before
+    moving on to the next archive.
 
 TR  Bu ZIP dosyası bleen tarafından oluşturuldu.
     files/        bu yedekte yeni olan veya değişen dosyalar
     DELETED.txt   önceki yedekten bu yana silinen dosyalar
     bleen-manifest.json   ayrıntılar (boyut, tarih, SHA-256)
 
-    bleen olmadan geri yüklemek için: önce FULL arşivini, sonra tüm
-    INCREMENTAL arşivlerini tarih sırasıyla çıkarın (üzerine yazın) ve
-    her DELETED.txt içindeki dosyaları silin.
+    bleen olmadan geri yüklemek için: en yeni FULL arşivini çıkarın.
+    Sonra sonraki her INCREMENTAL arşivi için, ad sırasıyla: arşivi çıkarın
+    (üzerine yazın), ardından içindeki DELETED.txt'de yazan dosyaları silin;
+    sonra bir sonraki arşive geçin.
 `

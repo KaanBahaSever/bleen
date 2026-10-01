@@ -15,7 +15,7 @@ const FAT32MaxPart int64 = 3900 << 20
 func MaxPartSize(dir string) int64 {
 	t, err := FSType(dir)
 	if err != nil {
-		return 0
+		return FAT32MaxPart // unknown: splitting is harmless, a 4 GB failure is not
 	}
 	if IsFAT32(t) {
 		return FAT32MaxPart

@@ -13,3 +13,5 @@ func openShared(p string) (io.ReadCloser, error) { return os.Open(p) }
 func isSharingViolation(error) bool { return false }
 
 func isCloudPlaceholder(fs.FileInfo) bool { return false }
+
+func irregularIsFile(fs.FileInfo) bool { return false }

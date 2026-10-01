@@ -95,6 +95,9 @@ func Restore(ctx context.Context, v *vault.Vault, src *catalog.Source, opt Resto
 	}
 	if len(opt.Paths) > 0 {
 		versions = selectPaths(versions, opt.Paths)
+		if len(versions) == 0 {
+			return nil, errorf(ENotFound, nil, "none of the selected paths exist in this backup")
+		}
 	}
 
 	rep := &RestoreReport{Snapshot: *snap, Dest: dest}
@@ -103,14 +106,34 @@ func Restore(ctx context.Context, v *vault.Vault, src *catalog.Source, opt Resto
 		rep.Issues = append(rep.Issues, is)
 		prog.Issue(is)
 	}
+	used := map[string]string{} // target (folded on Windows/macOS) → source path
+	fold := func(s string) string {
+		if runtime.GOOS != "linux" {
+			return strings.ToLower(s)
+		}
+		return s
+	}
 	target := func(p string) (string, bool) {
 		abs, renamed, err := SafeJoin(dest, p)
 		if err != nil {
 			issue(p, "E_UNSAFE_PATH", err)
 			return "", false
 		}
+		// Two backed-up names can map to one name here (a:b and a_b, or
+		// Foo and foo from a Linux server): never let one overwrite the other.
+		if prev, ok := used[fold(abs)]; ok && prev != p {
+			ext := filepath.Ext(abs)
+			for n := 2; ; n++ {
+				cand := fmt.Sprintf("%s (%d)%s", strings.TrimSuffix(abs, ext), n, ext)
+				if _, taken := used[fold(cand)]; !taken {
+					abs, renamed = cand, true
+					break
+				}
+			}
+		}
+		used[fold(abs)] = p
 		if renamed {
-			issue(p, ERenamed, fmt.Errorf("restored as %s (name not allowed on this system)", abs))
+			issue(p, ERenamed, fmt.Errorf("restored as %s (name not allowed on this system or already used)", abs))
 		}
 		return abs, true
 	}
@@ -239,10 +262,18 @@ func extractArchive(ctx context.Context, path string, items []catalog.Version,
 // selectPaths keeps the chosen files and folders (with their contents).
 func selectPaths(all []catalog.Version, paths []string) []catalog.Version {
 	var out []catalog.Version
+	norm := func(s string) string {
+		s = strings.Trim(strings.ReplaceAll(s, `\`, "/"), "/")
+		if runtime.GOOS != "linux" {
+			s = strings.ToLower(s)
+		}
+		return s
+	}
 	for _, v := range all {
+		vp := norm(v.Path)
 		for _, p := range paths {
-			p = strings.Trim(p, "/")
-			if v.Path == p || strings.HasPrefix(v.Path, p+"/") {
+			p = norm(p)
+			if vp == p || strings.HasPrefix(vp, p+"/") {
 				out = append(out, v)
 				break
 			}

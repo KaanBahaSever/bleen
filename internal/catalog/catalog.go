@@ -156,7 +156,10 @@ CREATE VIEW IF NOT EXISTS deleted_files AS
 
 // Open opens or creates a catalog database file.
 func Open(file string) (*DB, error) {
-	db, err := sql.Open("sqlite", "file:"+file+"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
+	// The path goes into a URI: escape characters that end or alter it
+	// (a user name like "Ali#1" would otherwise open the wrong file).
+	esc := strings.NewReplacer("%", "%25", "#", "%23", "?", "%3F").Replace(file)
+	db, err := sql.Open("sqlite", "file:"+esc+"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, err
 	}

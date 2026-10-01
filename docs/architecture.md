@@ -195,6 +195,8 @@ The draft asks for ZIP explicitly (FR-07), and tenet 2 requires backups to be op
 
 A chunked "vault format v2" could be considered after 1.0 if users need it. It must never cost us openability.
 
+**Why not one growing ZIP with a folder per date?** ZIP compresses each file on its own, so one big ZIP compresses no better than one ZIP per run. Appending to a single ZIP also means rewriting its central directory every time; a crash or an unplugged disk at that moment could make *every* backup unreadable, instead of only the unfinished run. A single file would also hit FAT32's 4 GiB limit, and old backups could never be deleted without rewriting the whole file. One archive per run keeps each failure small and each step reversible.
+
 ---
 
 ## 3. System architecture

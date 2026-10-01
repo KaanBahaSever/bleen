@@ -656,3 +656,87 @@ func TestManualRestoreWithoutBleen(t *testing.T) {
 		}
 	}
 }
+
+func TestPruneHeldWhenFullSkippedFiles(t *testing.T) {
+	v := newVault(t)
+	s := &sim{t: t, rnd: rand.New(rand.NewPCG(31, 31)), dir: filepath.Join(t.TempDir(), "src")}
+	s.write("a.txt", []byte("a"))
+	s.write("sub/b.txt", []byte("b"))
+	src := source.NewLocal(s.dir, nil)
+	if _, err := Backup(context.Background(), v, src, testOpts(0)); err != nil {
+		t.Fatal(err)
+	}
+	// The next full backup cannot read sub/: b.txt exists only in generation 1.
+	opt := testOpts(1)
+	opt.Full = true
+	bad := filepath.Join(s.dir, "sub")
+	os.Chmod(bad, 0o000)
+	defer os.Chmod(bad, 0o755)
+	rep, err := Backup(context.Background(), v, src, opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Issues) == 0 {
+		t.Skip("cannot make a folder unreadable on this system")
+	}
+	srcs, _ := v.Catalog.Sources()
+	pr, err := Prune(v, &srcs[0], 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pr.Generations != 0 || pr.Held == "" {
+		t.Fatalf("prune must hold: %+v", pr)
+	}
+}
+
+func TestVaultRobustness(t *testing.T) {
+	// A root with glob characters must not break recovery.
+	root := filepath.Join(t.TempDir(), "Yedek [Kaan]", "bleen")
+	v, err := vault.Create(root, "disk", "test", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(t.TempDir(), "src")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one"), 0o644)
+	opt := testOpts(0)
+	crash := errors.New("power cut")
+	opt.afterRename = func() error { return crash }
+	if _, err := Backup(context.Background(), v, source.NewLocal(dir, nil), opt); !errors.Is(err, crash) {
+		t.Fatalf("want simulated crash, got %v", err)
+	}
+	v.Close()
+
+	// A lock left by a dead process on this computer is removed on open.
+	host, _ := os.Hostname()
+	os.WriteFile(filepath.Join(root, ".bleen", "lock"), []byte(`{"host":"`+host+`","pid":999999,"since":"2026-01-01T00:00:00Z"}`), 0o644)
+	v, err = vault.Open(root, vault.OpenOptions{})
+	if err != nil {
+		t.Fatalf("stale lock should be removed: %v", err)
+	}
+	srcs, _ := v.Catalog.Sources()
+	if len(srcs) != 1 {
+		t.Fatalf("crashed backup was not recovered under a [bracket] root: %v", v.Recovered)
+	}
+	v.Close()
+
+	// An unreadable catalog is an error, and the file is left untouched.
+	cat := filepath.Join(root, ".bleen", "catalog.db")
+	os.WriteFile(cat, []byte("not a database"), 0o644)
+	if _, err := vault.Open(root, vault.OpenOptions{}); err == nil || !strings.Contains(err.Error(), "E_CATALOG_UNREADABLE") {
+		t.Fatalf("want E_CATALOG_UNREADABLE, got %v", err)
+	}
+	if b, _ := os.ReadFile(cat); string(b) != "not a database" {
+		t.Fatal("the unreadable catalog was replaced")
+	}
+
+	// Creating a vault where an earlier key exists must refuse.
+	os.Remove(filepath.Join(root, ".bleen", "vault.json"))
+	os.WriteFile(filepath.Join(root, ".bleen", "identity.age"), []byte("old key"), 0o644)
+	if _, err := vault.Create(root, "x", "test", "pw-123456789"); err == nil {
+		t.Fatal("Create overwrote an existing vault key")
+	}
+	if b, _ := os.ReadFile(filepath.Join(root, ".bleen", "identity.age")); string(b) != "old key" {
+		t.Fatal("identity.age was overwritten")
+	}
+}

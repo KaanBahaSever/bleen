@@ -81,6 +81,10 @@ type Entry struct {
 	Zip    string    `json:"zip,omitempty"`
 	Ref    *Ref      `json:"ref,omitempty"`
 	Target string    `json:"target,omitempty"` // symlink target
+
+	// KeepOnDisk leaves a deletion out of DELETED.txt: the path was only
+	// renamed in letter case and the new name is in the same backup.
+	KeepOnDisk bool `json:"-"`
 }
 
 // Ref points at bytes stored in another archive of the same vault.

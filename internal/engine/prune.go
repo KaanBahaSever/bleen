@@ -12,6 +12,8 @@ type PruneReport struct {
 	Generations int
 	Archives    int
 	Bytes       int64
+	// Held explains why nothing was deleted although the limit was reached.
+	Held string
 }
 
 // Prune keeps the newest keep generations of a source and deletes older
@@ -29,6 +31,20 @@ func Prune(v *vault.Vault, src *catalog.Source, keep int) (*PruneReport, error) 
 	gens, err := v.Catalog.Generations(src.ID)
 	if err != nil || len(gens) <= keep {
 		return rep, err
+	}
+	// Only delete older generations when the newest full backup captured
+	// every file: a file that was locked or unreadable during it may exist
+	// only in the older generations.
+	snaps, err := v.Catalog.Snapshots(src.ID)
+	if err != nil {
+		return nil, err
+	}
+	newest := gens[len(gens)-1]
+	for _, s := range snaps {
+		if s.GenerationID == newest.ID && s.Seq == 0 && s.FilesSkipped > 0 {
+			rep.Held = "the newest full backup skipped files; older backups are kept until a full backup captures everything"
+			return rep, nil
+		}
 	}
 	var files []string
 	for _, g := range gens[:len(gens)-keep] {
