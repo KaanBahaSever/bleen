@@ -32,7 +32,12 @@ func InstallDailyTask(exe string, args []string, at string) error {
 	if _, err := fmt.Sscanf(at, "%d:%d", &h, &m); err != nil || h < 0 || h > 23 || m < 0 || m > 59 {
 		return fmt.Errorf("invalid time %q", at)
 	}
-	quote := func(s string) string { return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"` }
+	// systemd expands %specifiers and $VARIABLES even inside quotes, and
+	// treats \ as an escape.
+	quote := func(s string) string {
+		s = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "%", "%%", "$", "$$").Replace(s)
+		return `"` + s + `"`
+	}
 	cmd := quote(exe)
 	for _, a := range args {
 		cmd += " " + quote(a)

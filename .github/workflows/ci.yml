@@ -49,3 +49,10 @@ jobs:
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
+      - name: site scripts parse
+        run: |
+          node -e '
+            const s = require("fs").readFileSync("site/index.html", "utf8");
+            const scripts = [...s.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+            scripts.forEach((code, i) => { new Function(code); console.log("script", i, "ok"); });
+          '

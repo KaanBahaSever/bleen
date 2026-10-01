@@ -81,9 +81,10 @@ type Entry struct {
 	Ref    *Ref      `json:"ref,omitempty"`
 	Target string    `json:"target,omitempty"` // symlink target
 
-	// KeepOnDisk leaves a deletion out of DELETED.txt: the path was only
-	// renamed in letter case and the new name is in the same backup.
-	KeepOnDisk bool `json:"-"`
+	// Replaces marks a path that changed kind (a file became a folder or
+	// the reverse). The old path is listed in DELETED.txt so that a hand
+	// restore removes it before extracting the new one.
+	Replaces bool `json:"-"`
 }
 
 // Ref points at bytes stored in another archive of the same vault.

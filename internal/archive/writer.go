@@ -164,7 +164,7 @@ func (w *Writer) AddFile(e Entry, b Blob) (partIndex int, zipName string, err er
 		UncompressedSize64: uint64(b.UncompressedSize),
 	}
 	prepareRawHeader(fh, e.MTime)
-	dst, err := w.cur.zw.CreateRaw(fh)
+	dst, err := createRaw(w.cur.zw, fh)
 	if err != nil {
 		return 0, "", err
 	}
@@ -252,7 +252,7 @@ func (w *Writer) closePart(last bool) error {
 	p.manifest.Part.Last = last
 	var deleted []string
 	for _, e := range p.manifest.Entries {
-		if e.Op == OpDeleted && !e.KeepOnDisk {
+		if e.Op == OpDeleted || e.Replaces {
 			deleted = append(deleted, e.Path)
 		}
 	}
@@ -304,7 +304,7 @@ func CopyEntry(zw *zip.Writer, f *zip.File, name string, mtime time.Time) error 
 		UncompressedSize64: f.UncompressedSize64,
 	}
 	prepareRawHeader(fh, mtime)
-	w, err := zw.CreateRaw(fh)
+	w, err := createRaw(zw, fh)
 	if err != nil {
 		return err
 	}
@@ -314,6 +314,26 @@ func CopyEntry(zw *zip.Writer, f *zip.File, name string, mtime time.Time) error 
 	}
 	_, err = io.Copy(w, r)
 	return err
+}
+
+// createRaw is zip.Writer.CreateRaw plus the ZIP64 extra field that the
+// local header of a 4 GiB+ entry needs (APPNOTE 4.5.3). Go writes that
+// field only into the central directory, so it is added for the local
+// header and taken off again before Go builds the central directory.
+func createRaw(zw *zip.Writer, fh *zip.FileHeader) (io.Writer, error) {
+	if fh.CompressedSize64 < 0xffffffff && fh.UncompressedSize64 < 0xffffffff {
+		return zw.CreateRaw(fh)
+	}
+	base := fh.Extra
+	var eb [20]byte
+	binary.LittleEndian.PutUint16(eb[0:], 0x0001) // ZIP64 extended information
+	binary.LittleEndian.PutUint16(eb[2:], 16)
+	binary.LittleEndian.PutUint64(eb[4:], fh.UncompressedSize64)
+	binary.LittleEndian.PutUint64(eb[12:], fh.CompressedSize64)
+	fh.Extra = append(append([]byte{}, base...), eb[:]...)
+	w, err := zw.CreateRaw(fh) // writes the local header now
+	fh.Extra = base
+	return w, err
 }
 
 // prepareRawHeader does for CreateRaw what zip.Writer.CreateHeader does
@@ -333,7 +353,15 @@ func prepareRawHeader(fh *zip.FileHeader, mtime time.Time) {
 	if mtime.IsZero() {
 		mtime = time.Now()
 	}
-	fh.SetModTime(mtime.Local()) //nolint:staticcheck // MS-DOS fields (local time) that CreateRaw would leave empty
+	// The MS-DOS date and time fields hold local time, as CreateHeader
+	// writes them (SetModTime would store UTC). Tools that ignore the
+	// extended timestamp below read these.
+	lt := mtime.Local()
+	if lt.Year() < 1980 {
+		lt = time.Date(1980, 1, 1, 0, 0, 0, 0, time.Local)
+	}
+	fh.ModifiedDate = uint16(lt.Day() + int(lt.Month())<<5 + (lt.Year()-1980)<<9)
+	fh.ModifiedTime = uint16(lt.Second()/2 + lt.Minute()<<5 + lt.Hour()<<11)
 	var eb [9]byte
 	binary.LittleEndian.PutUint16(eb[0:], 0x5455) // extended timestamp
 	binary.LittleEndian.PutUint16(eb[2:], 5)

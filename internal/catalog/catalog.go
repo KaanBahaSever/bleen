@@ -21,6 +21,10 @@ const schemaVersion = 1
 
 var ErrSnapshotExists = errors.New("snapshot already in catalog")
 
+// ErrNoFull means an incremental's generation has no full backup in the
+// catalog (for example one left behind when retention deleted the rest).
+var ErrNoFull = errors.New("generation has no full backup")
+
 type DB struct{ db *sql.DB }
 
 type Source struct {
@@ -189,6 +193,18 @@ func Open(file string) (*DB, error) {
 }
 
 func (c *DB) Close() error { return c.db.Close() }
+
+// Check runs SQLite's quick integrity check.
+func (c *DB) Check() error {
+	var res string
+	if err := c.db.QueryRow("PRAGMA quick_check").Scan(&res); err != nil {
+		return err
+	}
+	if res != "ok" {
+		return fmt.Errorf("catalog damaged: %s", res)
+	}
+	return nil
+}
 
 // SnapshotTo writes a consistent copy of the database to file.
 func (c *DB) SnapshotTo(file string) error {
@@ -544,7 +560,7 @@ func (c *DB) ApplySnapshot(folder string, parts []AppliedPart) (err error) {
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		if sn.Seq != 0 {
-			return fmt.Errorf("snapshot %s: generation %d has no full backup", sn.ID, sn.Generation)
+			return fmt.Errorf("snapshot %s: generation %d: %w", sn.ID, sn.Generation, ErrNoFull)
 		}
 		var res sql.Result
 		res, err = tx.Exec("INSERT INTO generations(source_id, number, started_at) VALUES(?,?,?)", sourceID, sn.Generation, sn.StartedAt.UnixMilli())
@@ -644,7 +660,7 @@ func (c *DB) ApplySnapshot(folder string, parts []AppliedPart) (err error) {
 			case e.Zip != "":
 				archiveID, entryName = partIDs[p.Manifest.Part.Index], e.Zip
 			case e.Ref != nil:
-				id, rerr := archiveIDByRel(tx, e.Ref.Archive)
+				id, rerr := archiveIDByRel(tx, sourceID, e.Ref.Archive)
 				if rerr != nil {
 					return fmt.Errorf("%s: %w", e.Path, rerr)
 				}
@@ -681,12 +697,13 @@ func (c *DB) ApplySnapshot(folder string, parts []AppliedPart) (err error) {
 	return tx.Commit()
 }
 
-func archiveIDByRel(tx *sql.Tx, rel string) (int64, error) {
-	folder, file := path.Split(rel)
-	folder = strings.TrimSuffix(folder, "/")
+// archiveIDByRel resolves a reference by file name within the source. The
+// folder part is ignored: the source folder may have been renamed on disk
+// since, and references never leave their source.
+func archiveIDByRel(tx *sql.Tx, sourceID int64, rel string) (int64, error) {
+	file := path.Base(rel)
 	var id int64
-	err := tx.QueryRow(`SELECT a.id FROM archives a JOIN sources s ON s.id = a.source_id
-		WHERE s.folder = ? AND a.filename = ?`, folder, file).Scan(&id)
+	err := tx.QueryRow(`SELECT id FROM archives WHERE source_id = ? AND filename = ?`, sourceID, file).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, fmt.Errorf("referenced archive %s is not in the catalog", rel)
 	}

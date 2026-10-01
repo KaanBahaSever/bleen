@@ -47,13 +47,19 @@
   $effect(() => {
     const [s, b, d] = [sourceId, backupId, dir];
     selected = [];
-    if (!s || !b) {
-      listing = null;
-      return;
-    }
+    error = '';
+    listing = null;
+    if (!s || !b) return;
+    // Only the answer for what is selected now may be shown: a slow reply
+    // for another day must not put its files under this day's header.
+    const current = () => s === sourceId && b === backupId && d === dir;
     api.Browse(s, b, d).then(
-      (r) => (listing = r),
-      (e) => (error = errText(e)),
+      (r) => {
+        if (current()) listing = r;
+      },
+      (e) => {
+        if (current()) error = errText(e);
+      },
     );
   });
 

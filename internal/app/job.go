@@ -130,8 +130,10 @@ func (a *App) update(j *job, throttle bool, f func(*JobState)) {
 	}
 	j.lastEmit = time.Now()
 	st := j.state
+	a.emitMu.Lock() // taken under a.mu: events leave in the order they were made
 	a.mu.Unlock()
 	a.Emit("job", st)
+	a.emitMu.Unlock()
 }
 
 // finish ends a job. The caller must have closed the vault already, so the
@@ -170,7 +172,13 @@ func toJobError(err error) *JobError {
 	}
 	var le *vault.LockedError
 	if errors.As(err, &le) {
+		if le.Running {
+			return &JobError{Code: "E_VAULT_IN_USE", Message: le.Error()}
+		}
 		return &JobError{Code: "E_VAULT_LOCKED", Message: le.Error()}
+	}
+	if errors.Is(err, context.Canceled) {
+		return &JobError{Code: engine.ECancelled, Message: err.Error()}
 	}
 	if errors.Is(err, os.ErrNotExist) {
 		return &JobError{Code: "E_VAULT_DISCONNECTED", Message: err.Error()}
@@ -272,7 +280,7 @@ func (a *App) BackupNow(ids []string, full bool) (string, error) {
 	a.mu.Lock()
 	var srcs []config.Source
 	for _, s := range a.cfg.Sources {
-		if (len(ids) == 0 && s.Enabled) || contains(ids, s.ID) {
+		if (len(ids) == 0 && s.On()) || contains(ids, s.ID) {
 			srcs = append(srcs, s)
 		}
 	}
@@ -299,6 +307,7 @@ func (a *App) BackupNow(ids []string, full bool) (string, error) {
 			return
 		}
 		var lastErr error
+		anyOK := false
 		cancelled := false
 		for i, s := range srcs {
 			a.update(j, false, func(st *JobState) {
@@ -342,12 +351,14 @@ func (a *App) BackupNow(ids []string, full bool) (string, error) {
 				}
 			case rep.NothingToDo:
 				rec.Result, rec.Issues = "nothing", rep.Issues
+				anyOK = true
 			default:
 				rec.Result, rec.BackupKind = "done", rep.Plan.Kind
 				rec.Files, rec.Deduped = rep.FilesStored+rep.FilesDeduped, rep.FilesDeduped
 				rec.Bytes, rec.Stored, rec.Verified = rep.BytesSource, rep.BytesStored, rep.Verified
 				rec.Archives, rec.Issues = rep.Archives, rep.Issues
 				rec.Pruned = prune(v, s.Path, keep)
+				anyOK = true
 			}
 			a.record(rec)
 			a.update(j, false, func(st *JobState) { st.Results = append(st.Results, rec) })
@@ -360,8 +371,8 @@ func (a *App) BackupNow(ids []string, full bool) (string, error) {
 		switch {
 		case cancelled:
 			a.finish(j, PhaseCancelled, nil)
-		case lastErr != nil && len(srcs) == 1:
-			a.finish(j, PhaseFailed, lastErr)
+		case lastErr != nil && !anyOK:
+			a.finish(j, PhaseFailed, lastErr) // nothing succeeded
 		default:
 			a.finish(j, PhaseDone, nil) // per-source failures are listed in Results
 		}
@@ -393,6 +404,9 @@ func (a *App) restoreJob(kind, sourceID, dest string, run restoreFunc) (string, 
 	if !filepath.IsAbs(dest) {
 		return "", errors.New("E_NOT_ABSOLUTE")
 	}
+	if !destReachable(dest) {
+		return "", errors.New("E_DEST_UNREACHABLE")
+	}
 	j, err := a.newJob(kind, 1)
 	if err != nil {
 		return "", err
@@ -417,6 +431,11 @@ func (a *App) restoreJob(kind, sourceID, dest string, run restoreFunc) (string, 
 		rec := RunRecord{ID: uuid.NewString(), Kind: kind, Source: src.Name, StartedAt: started, FinishedAt: time.Now(), Dest: dest}
 		if err != nil {
 			rec.Result, rec.Error = "failed", toJobError(err)
+			if rec.Error.Code == "E_VAULT_DISCONNECTED" && vault.IsVault(vaultPath) {
+				// The disk is still there: the destination went away.
+				rec.Error.Code = "E_DEST_UNREACHABLE"
+				err = errors.New("E_DEST_UNREACHABLE: " + err.Error())
+			}
 			phase := PhaseFailed
 			if rec.Error.Code == engine.ECancelled {
 				rec.Result, phase = "cancelled", PhaseCancelled
@@ -434,6 +453,16 @@ func (a *App) restoreJob(kind, sourceID, dest string, run restoreFunc) (string, 
 		a.finish(j, PhaseDone, nil)
 	}()
 	return j.state.ID, nil
+}
+
+// destReachable reports whether dest's drive or network share is there.
+func destReachable(dest string) bool {
+	vol := filepath.VolumeName(dest)
+	if vol == "" {
+		return true
+	}
+	_, err := os.Stat(vol + string(filepath.Separator))
+	return err == nil
 }
 
 // CheckBackups re-reads every archive on the disk ("verify").

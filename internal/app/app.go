@@ -34,6 +34,7 @@ type App struct {
 	Emit func(name string, data any)
 
 	mu        sync.Mutex
+	emitMu    sync.Mutex // keeps state and job events in order
 	cfg       *config.Config
 	view      *catalog.DB // read-only copy of the vault catalog
 	viewPath  string
@@ -78,6 +79,7 @@ func (a *App) Start(ctx context.Context) {
 			os.Remove(f)
 		}
 	}
+	go engine.CleanupTemp() // decrypted archives and spools a killed bleen left behind
 	a.refreshVault()
 	a.probeSources()
 	go a.watch()
@@ -237,8 +239,10 @@ func (a *App) stateLocked() State {
 func (a *App) emitState() {
 	a.mu.Lock()
 	st := a.stateLocked()
+	a.emitMu.Lock() // see update
 	a.mu.Unlock()
 	a.Emit("state", st)
+	a.emitMu.Unlock()
 }
 
 // ---- Settings -----------------------------------------------------------
@@ -951,6 +955,10 @@ func suggestPath(name string, at time.Time, ext string) string {
 // DismissNotice clears the one-time message shown at start.
 func (a *App) DismissNotice() {
 	a.mu.Lock()
+	reset := a.notice == "E_CONFIG_RESET"
 	a.notice = ""
+	if reset {
+		a.save() // the reset is acknowledged: don't show it again
+	}
 	a.mu.Unlock()
 }

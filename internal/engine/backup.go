@@ -62,9 +62,10 @@ type Report struct {
 }
 
 type task struct {
-	e    source.Entry
-	op   archive.Op
-	prev *catalog.Version
+	e        source.Entry
+	op       archive.Op
+	prev     *catalog.Version
+	replaces bool // the path was a folder or link before
 }
 
 type result struct {
@@ -176,17 +177,18 @@ func Backup(ctx context.Context, v *vault.Vault, src *source.LocalFS, opt Backup
 		switch e.Kind {
 		case archive.KindDir:
 			if !had || prev.Kind != archive.KindDir {
-				meta = append(meta, archive.Entry{Op: opFor(had), Path: p, Kind: archive.KindDir, MTime: e.ModTime.UTC()})
+				meta = append(meta, archive.Entry{Op: opFor(had), Path: p, Kind: archive.KindDir, MTime: e.ModTime.UTC(), Replaces: had})
 			}
 		case archive.KindSymlink:
 			if !had || prev.Kind != archive.KindSymlink || prev.LinkTarget != e.Target {
-				meta = append(meta, archive.Entry{Op: opFor(had), Path: p, Kind: archive.KindSymlink, Target: e.Target, MTime: e.ModTime.UTC()})
+				meta = append(meta, archive.Entry{Op: opFor(had), Path: p, Kind: archive.KindSymlink, Target: e.Target, MTime: e.ModTime.UTC(),
+					Replaces: had && prev.Kind != archive.KindSymlink})
 			}
 		case archive.KindFile:
 			plan.TotalFiles++
 			switch {
 			case !had || prev.Kind != archive.KindFile:
-				tasks = append(tasks, task{e: e, op: opFor(had)})
+				tasks = append(tasks, task{e: e, op: opFor(had), replaces: had})
 				plan.New++
 			case prev.Size == e.Size && prev.MTimeNS == e.ModTime.UnixNano():
 				// unchanged
@@ -197,22 +199,14 @@ func Backup(ctx context.Context, v *vault.Vault, src *source.LocalFS, opt Backup
 			}
 		}
 	}
-	caseless := source.CaseInsensitive()
-	lower := map[string]bool{}
-	if caseless {
-		for p := range entries {
-			lower[strings.ToLower(p)] = true
-		}
-	}
+	// A hand restore deletes what DELETED.txt lists before it extracts the
+	// archive, so a rename that only changes letter case ("Docs" to "docs")
+	// is simply listed: the old name goes, then the new one is extracted.
 	for p, prev := range state {
 		if _, ok := entries[p]; ok || unreadable(p) {
 			continue
 		}
-		e := archive.Entry{Op: archive.OpDeleted, Path: p, Kind: prev.Kind}
-		// A rename that only changes letter case ("Docs" to "docs"): the new
-		// name is in this backup, so extracting by hand must not delete it.
-		e.KeepOnDisk = caseless && lower[strings.ToLower(p)]
-		meta = append(meta, e)
+		meta = append(meta, archive.Entry{Op: archive.OpDeleted, Path: p, Kind: prev.Kind})
 		if prev.Kind == archive.KindFile {
 			plan.Deleted++
 		}
@@ -445,7 +439,7 @@ func runPipeline(ctx context.Context, v *vault.Vault, src *source.LocalFS, w *ar
 func store(w *archive.Writer, r result, rep *Report) error {
 	defer r.c.Spool.Close()
 	sha := hex.EncodeToString(r.c.SHA256[:])
-	e := archive.Entry{Op: r.t.op, Path: r.t.e.Path, Kind: archive.KindFile, Size: r.size, MTime: r.mtime.UTC(), SHA256: sha}
+	e := archive.Entry{Op: r.t.op, Path: r.t.e.Path, Kind: archive.KindFile, Size: r.size, MTime: r.mtime.UTC(), SHA256: sha, Replaces: r.t.replaces}
 	rep.BytesSource += r.size
 
 	if p := r.t.prev; p != nil && p.SHA256 == sha && p.Archive != "" {
@@ -561,13 +555,27 @@ func opFor(existed bool) archive.Op {
 	return archive.OpAdded
 }
 
-// archiveBase names an archive by local time, always with seconds so that
-// names sort in time order ("…_180035_INCREMENTAL" after "…_180002_FULL").
+// archiveBase names an archive by local time, always with seconds. A hand
+// restore applies archives in name order, so a name never sorts before an
+// existing one: after a time-zone change or a clock set back, the time in
+// the name is moved to one second after the newest existing archive.
 func archiveBase(dir string, t time.Time, kind string) string {
+	const layout = "2006-01-02_150405"
 	names := map[string]bool{}
+	newest := ""
 	if des, err := os.ReadDir(dir); err == nil {
 		for _, de := range des {
 			names[de.Name()] = true
+			if n := de.Name(); len(n) > len(layout) && n[len(layout)] == '_' && n[:len(layout)] > newest {
+				if _, err := time.ParseInLocation(layout, n[:len(layout)], time.Local); err == nil {
+					newest = n[:len(layout)]
+				}
+			}
+		}
+	}
+	if newest != "" && t.Local().Format(layout) <= newest {
+		n, _ := time.ParseInLocation(layout, newest, time.Local)
+		for t = n.Add(time.Second); t.Local().Format(layout) <= newest; t = t.Add(time.Second) {
 		}
 	}
 	taken := func(base string) bool {

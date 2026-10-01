@@ -32,7 +32,10 @@ const (
 var ErrNotVault = errors.New("not a bleen backup folder")
 
 // LockedError means another bleen instance is writing to the vault.
-type LockedError struct{ Holder string }
+type LockedError struct {
+	Holder  string
+	Running bool // the holder is a bleen still running on this computer
+}
 
 func (e *LockedError) Error() string {
 	return "backup disk is in use by another bleen (" + e.Holder + ")"
@@ -59,9 +62,11 @@ var ErrPasswordRequired = errors.New("E_PASSWORD_REQUIRED")
 const identityFile = "identity.age"
 
 type Vault struct {
-	Root    string
-	Meta    Meta
-	Catalog *catalog.DB
+	fresh    bool // opened with FreshCatalog
+	restored bool // catalog came from .tmp or .1
+	Root     string
+	Meta     Meta
+	Catalog  *catalog.DB
 
 	// Recovered lists what Open repaired (stray partial files, archives
 	// re-imported after a crash).
@@ -78,6 +83,10 @@ type OpenOptions struct {
 	BreakLock bool
 	Password  string    // for encrypted vaults
 	Key       *seal.Key // alternative to Password (already unlocked)
+	// FreshCatalog skips the current catalog (for rebuild-catalog when it
+	// can't be read): the working catalog starts empty and nothing is
+	// imported or published until Rebuild.
+	FreshCatalog bool
 }
 
 // Encrypted reports whether the vault's archives and catalog are encrypted.
@@ -228,6 +237,7 @@ func Open(root string, opt OpenOptions) (*Vault, error) {
 			v.Close()
 		}
 	}()
+	v.fresh = opt.FreshCatalog
 	if err := v.loadCatalog(); err != nil {
 		return nil, err
 	}
@@ -261,9 +271,11 @@ func (v *Vault) lock(breakLock bool) error {
 		}
 		holder, _ := os.ReadFile(p)
 		var li lockInfo
-		stale := json.Unmarshal(holder, &li) == nil && strings.EqualFold(li.Host, host) && li.PID > 0 && !processAlive(li.PID)
-		if !breakLock && !stale {
-			return &LockedError{Holder: strings.TrimSpace(string(holder))}
+		ok := json.Unmarshal(holder, &li) == nil && strings.EqualFold(li.Host, host) && li.PID > 0
+		stale := ok && !processAlive(li.PID)
+		running := ok && !stale // a bleen on this computer that is still running
+		if running || (!breakLock && !stale) {
+			return &LockedError{Holder: strings.TrimSpace(string(holder)), Running: running}
 		}
 		if stale {
 			v.Recovered = append(v.Recovered, "removed a lock left by a bleen that is no longer running")
@@ -274,9 +286,19 @@ func (v *Vault) lock(breakLock bool) error {
 }
 
 // BreakLock removes a vault's lock file. Only for locks left by a bleen
-// that is certainly not running any more (e.g. on another computer).
+// that is certainly not running any more (e.g. on another computer). It
+// refuses when the holder is a bleen still running on this computer, such
+// as a scheduled backup without a window.
 func BreakLock(root string) error {
-	err := os.Remove(sys(root, lockFile))
+	p := sys(root, lockFile)
+	if holder, err := os.ReadFile(p); err == nil {
+		var li lockInfo
+		host, _ := os.Hostname()
+		if json.Unmarshal(holder, &li) == nil && strings.EqualFold(li.Host, host) && li.PID > 0 && processAlive(li.PID) {
+			return &LockedError{Holder: strings.TrimSpace(string(holder)), Running: true}
+		}
+	}
+	err := os.Remove(p)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -308,13 +330,22 @@ func (v *Vault) loadCatalog() error {
 	f.Close()
 
 	cur := sys(v.Root, v.catalogName())
+	if v.fresh {
+		os.Remove(v.work)
+		db, err := catalog.Open(v.work)
+		if err != nil {
+			return err
+		}
+		v.Catalog = db
+		return nil
+	}
 	if _, err := os.Stat(cur); err == nil {
 		// The published catalog exists: it must be readable. Never fall
 		// back silently, or the next publish would replace a good catalog
 		// that is only unreadable right now (newer bleen, read error).
 		db, err := v.readCatalogFile(cur)
 		if err != nil {
-			return fmt.Errorf("E_CATALOG_UNREADABLE: the catalog on the backup disk can't be read (%v). Your backups are untouched; update bleen, or run 'bleenctl rebuild-catalog'", err)
+			return fmt.Errorf("E_CATALOG_UNREADABLE: the catalog on the backup disk can't be read (%v). Your backups are untouched; update bleen, or run 'bleenctl rebuild-catalog --vault %s'", err, v.Root)
 		}
 		v.Catalog = db
 		os.Remove(cur + ".tmp")
@@ -328,8 +359,15 @@ func (v *Vault) loadCatalog() error {
 		if _, err := os.Stat(name); err != nil {
 			continue
 		}
-		if db, err := v.readCatalogFile(name); err == nil {
+		db, err := v.readCatalogFile(name)
+		if err == nil {
+			if err = db.Check(); err != nil { // a .tmp may be half written
+				db.Close()
+			}
+		}
+		if err == nil {
 			v.Catalog = db
+			v.restored = true
 			v.Recovered = append(v.Recovered, "catalog restored from "+filepath.Base(name))
 			return nil
 		} else {
@@ -349,6 +387,13 @@ func (v *Vault) loadCatalog() error {
 // Publish writes the working catalog to the vault atomically, keeping the
 // previous revision as catalog.db.1.
 func (v *Vault) Publish() error {
+	if v.lockData != nil {
+		// Never publish after another bleen took the disk over (a broken
+		// lock): its catalog would be overwritten.
+		if cur, err := os.ReadFile(sys(v.Root, lockFile)); err != nil || string(cur) != string(v.lockData) {
+			return &LockedError{Holder: strings.TrimSpace(string(cur))}
+		}
+	}
 	tmp := sys(v.Root, v.catalogName()+".tmp")
 	os.Remove(tmp)
 	if v.Key != nil {
@@ -478,32 +523,51 @@ func SafeFolderName(name string) string {
 	return s
 }
 
-// Rebuild discards the catalog and re-imports every archive's manifest. If
-// any archive cannot be imported, nothing is published and the current
-// catalog stays as it is.
-func (v *Vault) Rebuild() error {
-	v.Catalog.Close()
+// Rebuild re-imports every archive's manifest into a new catalog. It never
+// moves or deletes archives. If any archive cannot be imported, nothing is
+// published and the current catalog stays as it is, unless allowSkipped is
+// set: then the catalog is published without those archives, and the
+// previous catalog file is kept as catalog.db.before-rebuild-<time>.
+func (v *Vault) Rebuild(allowSkipped bool) error {
+	old, oldWork := v.Catalog, v.work
+	v.work = oldWork + ".rebuild"
 	os.Remove(v.work)
 	db, err := catalog.Open(v.work)
 	if err != nil {
+		v.work = oldWork
 		return err
 	}
 	v.Catalog = db
-	n, failed, err := v.importArchives()
+	before := len(v.Recovered)
+	n, failed, err := v.importArchives(false)
+	if err == nil && failed > 0 && !allowSkipped {
+		err = fmt.Errorf("%d archive(s) could not be imported, so the catalog was not replaced (use --allow-skipped to save it without them): %s",
+			failed, strings.Join(v.Recovered[before:], "; "))
+	}
 	if err != nil {
+		db.Close()
+		os.Remove(v.work)
+		v.Catalog, v.work = old, oldWork
 		return err
 	}
+	old.Close()
+	os.Remove(oldWork)
 	if failed > 0 {
-		return fmt.Errorf("%d archive(s) could not be imported, so the catalog was not replaced: %s",
-			failed, strings.Join(v.Recovered, "; "))
+		cur := sys(v.Root, v.catalogName())
+		if _, err := os.Stat(cur); err == nil {
+			if err := copyFile(cur, cur+".before-rebuild-"+time.Now().Format("20060102-150405")); err != nil {
+				return err
+			}
+		}
 	}
+	v.fresh = false
 	v.Recovered = append(v.Recovered, fmt.Sprintf("catalog rebuilt from %d backups", n))
 	return v.Publish()
 }
 
 // archiveName matches the archive files bleen writes, so recovery never
 // touches anything else in the backup folder.
-var archiveName = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}_\d{4,6}_(FULL|INCREMENTAL)(_\d+)?(\.part\d{2})?\.zip(\.age)?(\.partial)?$`)
+var archiveName = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}_\d{4,6}_(FULL|INCREMENTAL)(_\d+)?(\.part\d{2,})?\.zip(\.age)?(\.partial)?$`)
 
 // sourceDirs lists the vault's source folders (not glob-based: folder names
 // may contain [ or *).
@@ -522,10 +586,17 @@ func (v *Vault) sourceDirs() []string {
 // were written but never recorded (a crash between rename and publish).
 func (v *Vault) recover() error {
 	known := map[string]string{} // lower-case rel → sha256
-	if list, err := v.Catalog.Archives(); err == nil {
-		for _, a := range list {
-			known[strings.ToLower(a.Rel)] = a.SHA256
-		}
+	list, err := v.Catalog.Archives()
+	if err != nil {
+		return err
+	}
+	for _, a := range list {
+		known[strings.ToLower(a.Rel)] = a.SHA256
+	}
+	if v.fresh {
+		// rebuild-catalog: the catalog is empty on purpose. Leave every
+		// file alone; Rebuild imports what is there.
+		return nil
 	}
 	for _, folder := range v.sourceDirs() {
 		des, _ := os.ReadDir(v.SourceDir(folder))
@@ -560,12 +631,16 @@ func (v *Vault) recover() error {
 			}
 		}
 	}
-	n, _, err := v.importArchives()
+	n, _, err := v.importArchives(true)
 	if err != nil {
 		return err
 	}
 	if n > 0 {
 		v.Recovered = append(v.Recovered, fmt.Sprintf("recorded %d backup(s) that were missing from the catalog", n))
+	}
+	if n > 0 || v.restored {
+		// A catalog restored from .tmp or .1 is published at once, so the
+		// next publish never starts from a missing current catalog.
 		return v.Publish()
 	}
 	return nil
@@ -579,7 +654,12 @@ type pendingSnapshot struct {
 
 // importArchives records archives on disk that the catalog does not know.
 // It returns how many snapshots were imported and how many archives failed.
-func (v *Vault) importArchives() (imported, failed int, err error) {
+// With moveAside, sets that can never be imported (parts missing, or an
+// incremental whose full backup is gone) go to .bleen/incomplete, but only
+// when every archive in that folder could be read: one unreadable part
+// must never send its healthy siblings away.
+func (v *Vault) importArchives(moveAside bool) (imported, failed int, err error) {
+	unreadable := map[string]bool{} // folders with an archive that could not be read
 	known := map[string]bool{}
 	list, err := v.Catalog.Archives()
 	if err != nil {
@@ -601,6 +681,7 @@ func (v *Vault) importArchives() (imported, failed int, err error) {
 			m, err := archive.ReadManifestAny(z, v.Opener())
 			if err != nil {
 				failed++
+				unreadable[folder] = true
 				v.Recovered = append(v.Recovered, fmt.Sprintf("skipped %s: %v", rel, err))
 				continue
 			}
@@ -652,16 +733,16 @@ func (v *Vault) importArchives() (imported, failed int, err error) {
 		if !complete {
 			// Never committed (the catalog doesn't know it) and unusable: move
 			// it aside so that extracting archives by hand stays correct.
-			aside := sys(v.Root, "incomplete", ps.folder)
-			os.MkdirAll(aside, 0o755)
-			for _, p := range ps.paths {
-				os.Rename(p, filepath.Join(aside, filepath.Base(p)))
-			}
-			v.Recovered = append(v.Recovered, fmt.Sprintf("moved an incomplete backup of %s to .bleen/incomplete", ps.folder))
+			v.setAside(ps, moveAside && !unreadable[ps.folder], "an incomplete backup")
 			continue
 		}
 		err := v.Catalog.ApplySnapshot(ps.folder, ps.parts)
 		if errors.Is(err, catalog.ErrSnapshotExists) {
+			continue
+		}
+		if errors.Is(err, catalog.ErrNoFull) {
+			// Left behind when retention deleted the rest of its generation.
+			v.setAside(ps, moveAside && !unreadable[ps.folder], "a backup whose full backup was deleted")
 			continue
 		}
 		if err != nil {
@@ -672,6 +753,21 @@ func (v *Vault) importArchives() (imported, failed int, err error) {
 		imported++
 	}
 	return imported, failed, nil
+}
+
+// setAside moves a set that can't be imported to .bleen/incomplete, or only
+// notes it when moving is not allowed now.
+func (v *Vault) setAside(ps *pendingSnapshot, move bool, what string) {
+	if !move {
+		v.Recovered = append(v.Recovered, fmt.Sprintf("left %s of %s in place (%s)", what, ps.folder, ps.parts[0].Filename))
+		return
+	}
+	aside := sys(v.Root, "incomplete", ps.folder)
+	os.MkdirAll(aside, 0o755)
+	for _, p := range ps.paths {
+		os.Rename(p, filepath.Join(aside, filepath.Base(p)))
+	}
+	v.Recovered = append(v.Recovered, fmt.Sprintf("moved %s of %s to .bleen/incomplete", what, ps.folder))
 }
 
 func writeFileSync(p string, b []byte) error {

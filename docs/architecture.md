@@ -422,7 +422,7 @@ func (p *Pipeline) Run(ctx context.Context, tasks <-chan Task, w *archive.Writer
 - **Split archives on FAT32.** Many USB sticks ship as FAT32, which has a **4 GiB file-size limit**. bleen detects the target filesystem and rolls to `…_FULL.part02.zip` and so on at 3.9 GiB. **Every part is a complete, standalone ZIP**, not a spanned archive, so any tool can open any part. Onboarding recommends exFAT (§5.4).
 - **Moved or copied files** (§3.3.2) are stored again under their new path, so extracting the archives by hand gives complete folders. The one exception is a file whose date changed but whose content did not: an incremental records it as a reference to the bytes already stored for the same path. A full backup always stores every file.
 
-**Restoring without bleen** (also on the website's FAQ): *extract the FULL archive, then each INCREMENTAL in date order and overwrite when asked, then delete the paths listed in each `DELETED.txt`.*
+**Restoring without bleen** (also on the website's FAQ): *extract the newest FULL archive into an empty folder; then, for each INCREMENTAL in name order, first delete the paths listed in its `DELETED.txt`, then extract it and overwrite when asked.* Deleting first matters: a path that changed kind (a file that became a folder, or the reverse) or only changed letter case is listed in `DELETED.txt` and stored again in the same archive. Archive names always sort in backup order: if the clock goes back, the time in a new name is moved to one second after the newest existing archive.
 
 #### 3.3.6 Verification (FR-16)
 

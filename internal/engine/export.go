@@ -55,11 +55,11 @@ func Export(ctx context.Context, v *vault.Vault, src *catalog.Source, opt Export
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return nil, err
 	}
-	tmp := dest + ".partial"
-	f, err := os.OpenFile(tmp, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o644)
+	f, err := os.CreateTemp(filepath.Dir(dest), ".bleen-export-*.partial")
 	if err != nil {
 		return nil, err
 	}
+	tmp := f.Name()
 	ok := false
 	defer func() {
 		if !ok {

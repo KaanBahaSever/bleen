@@ -81,11 +81,24 @@ func RunScheduled() error {
 			FinishedAt: time.Now(), Result: "failed", Error: &JobError{Code: code, Message: msg}})
 		return errors.New(code)
 	}
+	if a.notice == "E_CONFIG_RESET" {
+		return fail("E_CONFIG_RESET", "scheduled backup: the settings file could not be read")
+	}
 	vc := a.cfg.Vault
-	if !vault.IsVault(vc.Path) {
-		if other := a.connectedKnownVault(vc.ID); other != nil {
+	if m, err := vault.ReadMeta(vc.Path); err != nil || m.ID != vc.ID {
+		// Rotating disks often appear at the same path: use whichever
+		// known disk is plugged in, and remember it as the one in use.
+		other := a.connectedKnownVault(vc.ID)
+		switch {
+		case other != nil:
 			vc = *other
-		} else {
+			a.mu.Lock()
+			a.cfg.Vault = vc
+			a.save()
+			a.mu.Unlock()
+		case err == nil:
+			return fail("E_FOREIGN_VAULT", "scheduled backup: an unknown bleen disk is connected")
+		default:
 			return fail("E_VAULT_DISCONNECTED", "scheduled backup: the backup disk was not connected")
 		}
 	}
@@ -98,8 +111,9 @@ func RunScheduled() error {
 	}
 	defer v.Close()
 	excludes := append(append([]string{}, source.DefaultExcludes...), a.cfg.Backup.Exclude...)
+	failed := 0
 	for _, s := range a.cfg.Sources {
-		if !s.Enabled {
+		if !s.On() {
 			continue
 		}
 		started := time.Now()
@@ -113,6 +127,7 @@ func RunScheduled() error {
 		switch {
 		case err != nil:
 			rec.Result, rec.Error = "failed", toJobError(err)
+			failed++
 		case rep.NothingToDo:
 			rec.Result, rec.Issues = "nothing", rep.Issues
 		default:
@@ -123,6 +138,9 @@ func RunScheduled() error {
 			rec.Pruned = prune(v, s.Path, a.cfg.Backup.KeepGenerations)
 		}
 		a.record(rec)
+	}
+	if failed > 0 {
+		return fmt.Errorf("%d location(s) failed", failed) // a non-zero exit code for the scheduler
 	}
 	return nil
 }
@@ -208,6 +226,9 @@ func (a *App) AddSourceAs(path, user, password string) (SourceState, error) {
 func splitUNC(p string) (server, share string, ok bool) {
 	p = strings.ReplaceAll(p, "/", `\`)
 	if !strings.HasPrefix(p, `\`) {
+		return "", "", false
+	}
+	if len(p) < 3 || !strings.HasPrefix(p, `\\`) {
 		return "", "", false
 	}
 	parts := strings.SplitN(p[2:], `\`, 3)

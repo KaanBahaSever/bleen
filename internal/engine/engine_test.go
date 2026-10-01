@@ -1,12 +1,10 @@
 package engine
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"math/rand/v2"
 	"os"
@@ -271,7 +269,7 @@ func TestTimeTravel(t *testing.T) {
 
 			// The catalog is derived data: rebuilding it from the archives
 			// must give the same restores.
-			if err := v.Rebuild(); err != nil {
+			if err := v.Rebuild(false); err != nil {
 				t.Fatal(err)
 			}
 			restoreAll(t, v, truth)
@@ -440,7 +438,7 @@ func TestSplitParts(t *testing.T) {
 		t.Fatalf("expected several parts, got %v", rep.Archives)
 	}
 	restoreAll(t, v, []tree{readTree(t, s.dir)})
-	if err := v.Rebuild(); err != nil {
+	if err := v.Rebuild(false); err != nil {
 		t.Fatal(err)
 	}
 	restoreAll(t, v, []tree{readTree(t, s.dir)})
@@ -561,7 +559,7 @@ func TestEncryptedVault(t *testing.T) {
 	if vr, err := VerifyVault(context.Background(), v, nil); err != nil || len(vr.Problems) > 0 {
 		t.Fatalf("verify: %v %+v", err, vr)
 	}
-	if err := v.Rebuild(); err != nil {
+	if err := v.Rebuild(false); err != nil {
 		t.Fatal(err)
 	}
 	restoreAll(t, v, truth)
@@ -596,9 +594,9 @@ func TestEncryptedVault(t *testing.T) {
 	restoreAll(t, v, truth)
 }
 
-// TestManualRestoreWithoutBleen follows the README: extract the FULL
-// archive, then every INCREMENTAL in order, deleting what DELETED.txt
-// lists. The result must equal the folder, moves and copies included.
+// TestManualRestoreWithoutBleen follows the documented hand restore: for
+// the FULL archive and then every INCREMENTAL in name order, delete what
+// its DELETED.txt lists, then extract it. The result must equal the folder, moves and copies included.
 func TestManualRestoreWithoutBleen(t *testing.T) {
 	for _, seed := range []uint64{4, 5, 6} {
 		v := newVault(t)
@@ -620,36 +618,7 @@ func TestManualRestoreWithoutBleen(t *testing.T) {
 		sort.Strings(zips) // names start with the date
 		dest := t.TempDir()
 		for _, z := range zips {
-			zr, err := zip.OpenReader(z)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, f := range zr.File {
-				rel, ok := strings.CutPrefix(f.Name, "files/")
-				switch {
-				case !ok:
-					if f.Name == "DELETED.txt" {
-						rc, _ := f.Open()
-						b, _ := io.ReadAll(rc)
-						rc.Close()
-						for _, line := range strings.Split(strings.TrimSpace(string(b)), "\r\n") {
-							if line != "" {
-								os.RemoveAll(filepath.Join(dest, filepath.FromSlash(line)))
-							}
-						}
-					}
-				case strings.HasSuffix(rel, "/"):
-					os.MkdirAll(filepath.Join(dest, filepath.FromSlash(rel)), 0o755)
-				default:
-					p := filepath.Join(dest, filepath.FromSlash(rel))
-					os.MkdirAll(filepath.Dir(p), 0o755)
-					rc, _ := f.Open()
-					b, _ := io.ReadAll(rc)
-					rc.Close()
-					os.WriteFile(p, b, 0o644)
-				}
-			}
-			zr.Close()
+			handExtract(t, z, dest)
 		}
 		if d := diffTrees(readTree(t, s.dir), readTree(t, dest)); d != "" {
 			t.Fatalf("seed %d: hand-extracted archives differ from the folder:\n%s", seed, d)

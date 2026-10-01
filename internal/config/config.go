@@ -41,9 +41,12 @@ type Source struct {
 	ID      string   `toml:"id"`
 	Name    string   `toml:"name"`
 	Path    string   `toml:"path"`
-	Enabled bool     `toml:"enabled"`
+	Enabled *bool    `toml:"enabled,omitempty"` // missing means on
 	Exclude []string `toml:"exclude,omitempty"`
 }
+
+// On reports whether "Back up" and scheduled runs include this location.
+func (s Source) On() bool { return s.Enabled == nil || *s.Enabled }
 
 type Vault struct {
 	ID    string `toml:"id,omitempty"`
@@ -94,6 +97,11 @@ func Load(dir string) (*Config, error) {
 	c.path = filepath.Join(dir, "config.toml")
 	b, err := os.ReadFile(c.path)
 	if errors.Is(err, os.ErrNotExist) {
+		// A broken file was set aside and nothing was saved since (for
+		// example a scheduled run found it): still tell the user.
+		if old, _ := filepath.Glob(c.path + ".broken-*"); len(old) > 0 {
+			return c, ErrReset
+		}
 		return c, nil
 	}
 	if err != nil {
@@ -106,6 +114,11 @@ func Load(dir string) (*Config, error) {
 		d := defaults()
 		d.path = c.path
 		return d, ErrReset
+	}
+	for i := range c.Sources {
+		if c.Sources[i].ID == "" { // added by hand
+			c.Sources[i].ID = uuid.NewString()
+		}
 	}
 	if c.Vault.Path != "" {
 		c.RememberVault(c.Vault)
@@ -144,7 +157,7 @@ func (c *Config) AddSource(path, name string) Source {
 	if name == "" {
 		name = filepath.Base(path)
 	}
-	s := Source{ID: uuid.NewString(), Name: name, Path: path, Enabled: true}
+	s := Source{ID: uuid.NewString(), Name: name, Path: path}
 	c.Sources = append(c.Sources, s)
 	return s
 }

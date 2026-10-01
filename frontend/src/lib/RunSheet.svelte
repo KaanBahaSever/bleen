@@ -3,7 +3,7 @@
   import Sheet from './ui/Sheet.svelte';
   import Mascot from './ui/Mascot.svelte';
   import ProgressBean from './ui/ProgressBean.svelte';
-  import { api, errText, issueText, lang, store, t } from './store.svelte';
+  import { api, errText, issueText, lang, store, t, toast } from './store.svelte';
   import { fmtDate, fmtDuration, fmtNumber, fmtSize, isZeroTime } from './i18n';
   import type { app } from './wailsjs/go/models';
 
@@ -19,8 +19,12 @@
     api.ConfirmPlan(ok);
   }
   async function breakLock() {
-    await api.BreakLock();
-    api.DismissJob();
+    try {
+      await api.BreakLock();
+      api.DismissJob();
+    } catch (e) {
+      toast(errText(e));
+    }
   }
 
   // ETA from throughput since the copy phase started.
@@ -58,7 +62,7 @@
   );
 
   const title = $derived.by(() => {
-    if (job.phase === 'done') return t('run.done');
+    if (job.phase === 'done') return (job.results ?? []).some((r) => r.result === 'failed') ? t('run.doneProblems') : t('run.done');
     if (job.phase === 'failed') return t('run.failed');
     if (job.phase === 'cancelled') return t('run.cancelled');
     if (job.phase === 'awaiting') return t('run.preflight');

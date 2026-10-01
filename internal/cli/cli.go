@@ -51,6 +51,8 @@ func newRoot() *cobra.Command {
 		Version:       Version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		// Temp files (decrypted archives, spools) a killed bleen left behind.
+		PersistentPreRun: func(*cobra.Command, []string) { engine.CleanupTemp() },
 	}
 	root.PersistentFlags().String("vault", os.Getenv("BLEEN_VAULT"), "backup folder on the target disk (or set BLEEN_VAULT)")
 	root.PersistentFlags().Bool("break-lock", false, "take over a vault left locked by a crashed bleen")
@@ -59,13 +61,15 @@ func newRoot() *cobra.Command {
 	return root
 }
 
-func openVault(cmd *cobra.Command) (*vault.Vault, error) {
+func openVault(cmd *cobra.Command) (*vault.Vault, error) { return openVaultWith(cmd, false) }
+
+func openVaultWith(cmd *cobra.Command, freshCatalog bool) (*vault.Vault, error) {
 	p, _ := cmd.Flags().GetString("vault")
 	if p == "" {
 		return nil, errors.New("--vault is required (the bleen folder on your backup disk)")
 	}
 	brk, _ := cmd.Flags().GetBool("break-lock")
-	opt := vault.OpenOptions{BreakLock: brk}
+	opt := vault.OpenOptions{BreakLock: brk, FreshCatalog: freshCatalog}
 	if meta, err := vault.ReadMeta(p); err == nil && meta.Encrypted() {
 		pwFile, _ := cmd.Flags().GetString("password-file")
 		if opt.Password, err = password(pwFile, false); err != nil {
@@ -269,7 +273,7 @@ func listCmd() *cobra.Command {
 					snaps, _ := v.Catalog.Snapshots(s.ID)
 					last := "-"
 					if n := len(snaps); n > 0 {
-						last = snaps[n-1].FinishedAt.Local().Format("2006-01-02 15:04")
+						last = snaps[n-1].StartedAt.Local().Format("2006-01-02 15:04")
 					}
 					fmt.Printf("%-20s %-18s %-8d %s (%s)\n", s.Folder, last, len(snaps), s.Origin, s.Host)
 				}
@@ -286,7 +290,7 @@ func listCmd() *cobra.Command {
 			fmt.Printf("%s  ←  %s\n\n", src.Folder, src.Origin)
 			fmt.Printf("%-9s %-17s %-12s %8s %8s %8s %10s\n", "ID", "DATE", "TYPE", "NEW", "CHANGED", "DELETED", "SIZE")
 			for _, s := range snaps {
-				fmt.Printf("%-9s %-17s %-12s %8d %8d %8d %10s\n", s.UUID[:8], s.FinishedAt.Local().Format("2006-01-02 15:04"),
+				fmt.Printf("%-9s %-17s %-12s %8d %8d %8d %10s\n", s.UUID[:8], s.StartedAt.Local().Format("2006-01-02 15:04"),
 					s.Kind, s.FilesNew, s.FilesModified, s.FilesDeleted, size(s.BytesStored))
 			}
 			return nil
@@ -309,6 +313,12 @@ func restoreCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if (to == "") == (zipTo == "") {
 				return errors.New("give either --to <folder> or --zip <file.zip>")
+			}
+			if zipTo != "" && overwrite {
+				return errors.New("--overwrite is for --to; --zip always makes a new file")
+			}
+			if id != "" && cmd.Flags().Changed("at") {
+				return errors.New("give either --id or --at, not both")
 			}
 			v, err := openVault(cmd)
 			if err != nil {
@@ -341,7 +351,7 @@ func restoreCmd() *cobra.Command {
 				return err
 			}
 			fmt.Printf("✓ %d files %s %s (%s), as of %s\n", rep.Files, verb, rep.Dest, size(rep.Bytes),
-				rep.Snapshot.FinishedAt.Local().Format("2006-01-02 15:04"))
+				rep.Snapshot.StartedAt.Local().Format("2006-01-02 15:04"))
 			printIssues(rep.Issues, false)
 			if len(rep.Issues) > 0 {
 				return fmt.Errorf("%d file(s) were not restored correctly", len(rep.Issues))
@@ -405,16 +415,20 @@ func verifyCmd() *cobra.Command {
 }
 
 func rebuildCmd() *cobra.Command {
-	return &cobra.Command{
+	var allowSkipped bool
+	c := &cobra.Command{
 		Use:   "rebuild-catalog",
 		Short: "Rebuild the catalog from the archives' own manifests",
+		Long: "Rebuilds the catalog from the archives alone, also when the current catalog can't be read.\n" +
+			"Archives are never moved or deleted. If an archive can't be read, nothing is saved unless\n" +
+			"--allow-skipped is given; the previous catalog file is then kept next to the new one.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			v, err := openVault(cmd)
+			v, err := openVaultWith(cmd, true)
 			if err != nil {
 				return err
 			}
 			defer v.Close()
-			if err := v.Rebuild(); err != nil {
+			if err := v.Rebuild(allowSkipped); err != nil {
 				return err
 			}
 			for _, r := range v.Recovered {
@@ -423,6 +437,8 @@ func rebuildCmd() *cobra.Command {
 			return nil
 		},
 	}
+	c.Flags().BoolVar(&allowSkipped, "allow-skipped", false, "save the rebuilt catalog even if some archives could not be read")
+	return c
 }
 
 func findSource(v *vault.Vault, key string) (*catalog.Source, error) {

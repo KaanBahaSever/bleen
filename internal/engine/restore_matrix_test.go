@@ -240,7 +240,7 @@ func TestRestoreEveryDay(t *testing.T) {
 
 			// The catalog is derived data: delete it, rebuild it from the
 			// archives alone and check again.
-			if err := v.Rebuild(); err != nil {
+			if err := v.Rebuild(false); err != nil {
 				t.Fatal(err)
 			}
 			srcs, _ = v.Catalog.Sources()
@@ -397,41 +397,50 @@ func handRestoreEveryDay(t *testing.T, v *vault.Vault, dir string, truth []tree)
 }
 
 func handExtract(t *testing.T, z, dest string) {
+	t.Helper()
 	zr, err := zip.OpenReader(z)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer zr.Close()
-	var deleted []string
+	// 1. Delete what DELETED.txt lists.
+	for _, f := range zr.File {
+		if f.Name != "DELETED.txt" {
+			continue
+		}
+		rc, _ := f.Open()
+		b, _ := io.ReadAll(rc)
+		rc.Close()
+		for _, line := range strings.Split(strings.TrimSpace(string(b)), "\r\n") {
+			if line != "" {
+				os.RemoveAll(filepath.Join(dest, filepath.FromSlash(line)))
+			}
+		}
+	}
+	// 2. Extract, replacing files.
 	for _, f := range zr.File {
 		rel, ok := strings.CutPrefix(f.Name, "files/")
 		switch {
 		case !ok:
-			if f.Name == "DELETED.txt" {
-				rc, _ := f.Open()
-				b, _ := io.ReadAll(rc)
-				rc.Close()
-				deleted = strings.Split(strings.TrimSpace(string(b)), "\r\n")
-			}
 		case strings.HasSuffix(rel, "/"):
-			os.MkdirAll(filepath.Join(dest, filepath.FromSlash(rel)), 0o755)
+			if err := os.MkdirAll(filepath.Join(dest, filepath.FromSlash(rel)), 0o755); err != nil {
+				t.Fatalf("hand extract of %s: %v", f.Name, err)
+			}
 		default:
 			p := filepath.Join(dest, filepath.FromSlash(rel))
-			os.MkdirAll(filepath.Dir(p), 0o755)
+			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+				t.Fatalf("hand extract of %s: %v", f.Name, err)
+			}
 			rc, _ := f.Open()
 			b, err := io.ReadAll(rc)
 			rc.Close()
 			if err != nil {
 				t.Fatal(err)
 			}
-			// Replace, as 7-Zip does: a case-only rename gets its new name.
-			os.Remove(p)
-			os.WriteFile(p, b, 0o644)
-		}
-	}
-	for _, line := range deleted {
-		if line != "" {
-			os.RemoveAll(filepath.Join(dest, filepath.FromSlash(line)))
+			os.Remove(p) // replace, as 7-Zip does: a case-only rename gets its new name
+			if err := os.WriteFile(p, b, 0o644); err != nil {
+				t.Fatalf("hand extract of %s: %v", f.Name, err)
+			}
 		}
 	}
 }

@@ -42,7 +42,7 @@ const backups = [
 ];
 
 const state: any = {
-  version: 'v0.3.0-beta.1',
+  version: 'v0.3.0-beta.2',
   language: lang,
   theme: new URLSearchParams(location.search).get('theme') ?? 'light',
   confirmBeforeRun: true,

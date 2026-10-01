@@ -204,7 +204,10 @@ func Restore(ctx context.Context, v *vault.Vault, src *catalog.Source, opt Resto
 		}
 		rep.Dirs++
 	}
-	return rep, ctx.Err()
+	if ctx.Err() != nil {
+		return nil, errorf(ECancelled, nil, "cancelled")
+	}
+	return rep, nil
 }
 
 // stateFor lists what a source contained at a snapshot, optionally only
@@ -260,14 +263,13 @@ func extractArchive(ctx context.Context, path string, items []catalog.Version,
 		byName[f.Name] = f
 	}
 	// Read in on-disk order: sequential I/O matters on USB hard disks.
-	offset := func(v catalog.Version) int64 {
-		if f := byName[v.EntryName]; f != nil {
-			o, _ := f.DataOffset()
-			return o
-		}
-		return 0
+	// The central directory is in write order, so its index is the order
+	// of the data on disk.
+	pos := make(map[string]int, len(zr.File))
+	for i, f := range zr.File {
+		pos[f.Name] = i
 	}
-	sort.Slice(items, func(i, j int) bool { return offset(items[i]) < offset(items[j]) })
+	sort.SliceStable(items, func(i, j int) bool { return pos[items[i].EntryName] < pos[items[j].EntryName] })
 	for _, it := range items {
 		if ctx.Err() != nil {
 			return errorf(ECancelled, nil, "cancelled")
@@ -328,11 +330,12 @@ func extractOne(f *zip.File, dst string, it catalog.Version) error {
 		return err
 	}
 	defer rc.Close()
-	tmp := dst + ".bleen-tmp"
-	out, err := os.Create(tmp)
+	// A short temp name: a name of up to 255 characters must still fit.
+	out, err := os.CreateTemp(filepath.Dir(dst), ".bleen-*.tmp")
 	if err != nil {
 		return err
 	}
+	tmp := out.Name()
 	h := sha256.New()
 	_, err = io.Copy(io.MultiWriter(out, h), rc)
 	if cerr := out.Close(); err == nil {
