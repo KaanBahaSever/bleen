@@ -25,7 +25,11 @@
   }
 
   const same = (a: string, b: string) => {
-    const n = (x: string) => x.trim().replace(/[\\/]+$/, '').toLowerCase();
+    const fold = store.state?.os !== 'linux'; // Windows and macOS ignore letter case
+    const n = (x: string) => {
+      const s = x.trim().replace(/[\\/]+$/, '');
+      return fold ? s.toLowerCase() : s;
+    };
     return n(a) === n(b);
   };
 

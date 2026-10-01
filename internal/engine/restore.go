@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kaanbahasever/bleen/internal/archive"
@@ -270,31 +271,69 @@ func extractArchive(ctx context.Context, path string, items []catalog.Version,
 		pos[f.Name] = i
 	}
 	sort.SliceStable(items, func(i, j int) bool { return pos[items[i].EntryName] < pos[items[j].EntryName] })
+
+	// Files are written by a few workers: with many small files the time
+	// goes to creating files (and the virus scanner looking at each one),
+	// not to reading. Targets are chosen here, in order, so name clashes
+	// are resolved the same way every time.
+	type work struct {
+		f   *zip.File
+		dst string
+		it  catalog.Version
+	}
+	var mu sync.Mutex // guards issue and done
+	jobs := make(chan work)
+	var wg sync.WaitGroup
+	for range restoreWorkers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for w := range jobs {
+				err := extractOne(w.f, w.dst, w.it)
+				mu.Lock()
+				if err != nil {
+					code := "E_WRITE_FAILED"
+					if errors.Is(err, errChecksum) || errors.Is(err, zip.ErrChecksum) {
+						code = EChecksumMismatch
+					}
+					issue(w.it.Path, code, err)
+				} else {
+					done(w.it)
+				}
+				mu.Unlock()
+			}
+		}()
+	}
+	cancelled := false
 	for _, it := range items {
 		if ctx.Err() != nil {
-			return errorf(ECancelled, nil, "cancelled")
+			cancelled = true
+			break
 		}
 		f := byName[it.EntryName]
+		mu.Lock()
+		var dst string
+		ok := false
 		if f == nil {
 			issue(it.Path, "E_ENTRY_MISSING", fmt.Errorf("%s is missing from %s", it.EntryName, filepath.Base(path)))
-			continue
+		} else {
+			dst, ok = target(it.Path)
 		}
-		dst, ok := target(it.Path)
-		if !ok {
-			continue
+		mu.Unlock()
+		if ok {
+			jobs <- work{f, dst, it}
 		}
-		if err := extractOne(f, dst, it); err != nil {
-			code := "E_WRITE_FAILED"
-			if errors.Is(err, errChecksum) || errors.Is(err, zip.ErrChecksum) {
-				code = EChecksumMismatch
-			}
-			issue(it.Path, code, err)
-			continue
-		}
-		done(it)
+	}
+	close(jobs)
+	wg.Wait()
+	if cancelled {
+		return errorf(ECancelled, nil, "cancelled")
 	}
 	return nil
 }
+
+// restoreWorkers is how many files a restore writes at once.
+const restoreWorkers = 4
 
 // selectPaths keeps the chosen files and folders (with their contents).
 func selectPaths(all []catalog.Version, paths []string) []catalog.Version {

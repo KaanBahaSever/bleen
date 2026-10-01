@@ -394,7 +394,13 @@ func (a *App) Restore(sourceID, backupID, dest string, paths []string) (string, 
 // Export saves a backup (or only some paths of it) as one new ZIP file. A
 // name without .zip gets it, so the file opens as a ZIP everywhere.
 func (a *App) Export(sourceID, backupID, dest string, paths []string) (string, error) {
-	dest = strings.TrimSpace(dest)
+	dest = strings.TrimRight(strings.TrimSpace(dest), ". ")
+	if dest == "" || strings.HasSuffix(dest, `\`) || strings.HasSuffix(dest, "/") {
+		return "", errors.New("E_DEST_NOT_FILE") // a folder, not a file name
+	}
+	if fi, err := os.Stat(dest); err == nil && fi.IsDir() {
+		return "", errors.New("E_DEST_NOT_FILE")
+	}
 	if !strings.EqualFold(filepath.Ext(dest), ".zip") {
 		dest += ".zip"
 	}

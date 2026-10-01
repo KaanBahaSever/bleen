@@ -258,7 +258,7 @@
         <button class="btn btn-secondary" onclick={() => api.OpenFolder(job.dest!)}>{t('common.showFile')}</button>
       {:else if job.kind === 'backup' && wroteArchives && store.state?.vault?.path}
         <button class="btn btn-secondary" onclick={() => api.OpenFolder(store.state!.vault!.path)}>{t('run.openBackup')}</button>
-      {:else if job.kind === 'verify' && problems}
+      {:else if job.kind === 'verify' && job.phase === 'done' && (job.results ?? []).some((r) => (r.issues?.length ?? 0) > 0)}
         <button class="btn btn-secondary" onclick={freshFull}>{t('run.freshFull')}</button>
       {/if}
       <button class="btn btn-primary" onclick={close}>{t('common.done')}</button>

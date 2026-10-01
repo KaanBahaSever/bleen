@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0-beta.4
+
+Results of end-to-end tests with the released binaries. / Yayımlanan dosyalarla yapılan uçtan uca testlerin sonuçları.
+
+- **Faster:** restore writes several files at once (20,000 small files: 17 s → 9 s)
+- **Fixed:** temporary files of a bleen that was killed are removed at the next start instead of after a day
+- **Fixed:** a ZIP destination that is a folder is refused instead of creating a file named ".zip"
+- **Fixed:** "Make a full backup" is only offered after a check that found damage; the location menu closes after a choice; Enter on the menu button no longer opens the history; errors when removing a location or disk are shown; the duplicate-location check follows the system's letter-case rules; an old password error disappears once the password is fixed
+
+Tested: 30 days of random changes (paths up to 480 characters, emoji, case-only renames, files that became folders) restored by id, as a ZIP and by hand on Windows and Linux; an encrypted disk made on Linux restored on Windows; a 5 GB file through bleen, Windows Explorer, tar and Expand-Archive; a backup killed halfway; the empty-folder, missing-folder and mass-change guards; 20,000 files.
+
 ## 0.3.0-beta.3
 
 Fixes from a hands-on test of every screen. / Her ekranın elle denenmesinden gelen düzeltmeler.

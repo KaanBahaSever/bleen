@@ -122,7 +122,7 @@
             role="button"
             tabindex="0"
             onclick={() => openHistory(s)}
-            onkeydown={(e) => e.key === 'Enter' && openHistory(s)}
+            onkeydown={(e) => e.key === 'Enter' && e.target === e.currentTarget && openHistory(s)}
           >
             <div class="flex items-start gap-3">
               <span class="mt-0.5 text-accent">
@@ -144,10 +144,10 @@
               {#if menu === s.id}
                 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_interactive_supports_focus -->
                 <div class="menu card" role="menu" tabindex="-1" onclick={(e) => e.stopPropagation()}>
-                  <button role="menuitem" disabled={!vault?.connected || !!store.job} onclick={() => backupNow([s.id])}>
+                  <button role="menuitem" disabled={!vault?.connected || !!store.job} onclick={() => ((menu = ''), backupNow([s.id]))}>
                     {t('home.backupOnly')}
                   </button>
-                  <button role="menuitem" disabled={!vault?.connected || !!store.job || s.backups === 0} onclick={() => backupNow([s.id], true)}>
+                  <button role="menuitem" disabled={!vault?.connected || !!store.job || s.backups === 0} onclick={() => ((menu = ''), backupNow([s.id], true))}>
                     {t('home.freshFull')}
                   </button>
                   <button role="menuitem" class="text-bad" onclick={() => ((menu = ''), (removing = s))}>{t('common.remove')}</button>

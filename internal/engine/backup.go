@@ -517,6 +517,9 @@ func readOne(ctx context.Context, src *source.LocalFS, t task, opt BackupOptions
 		c, err := archive.Compress(gatedReader{f, opt.Gate, ctx}, t.e.Path, before.Size, opt.TempDir)
 		f.Close()
 		if err != nil {
+			if ctx.Err() != nil {
+				return fail(ECancelled, ctx.Err())
+			}
 			return fail(source.ErrCode(err), err)
 		}
 		after, err := src.Stat(t.e.Path)
@@ -632,7 +635,7 @@ func verifyNew(v *vault.Vault, p archive.Part) ([]byte, error) {
 	if !bytes.Equal(plain, p.PlainSHA256) {
 		return nil, errors.New("decrypted archive differs from what was written")
 	}
-	f, err := os.CreateTemp("", "bleen-open-*.zip")
+	f, err := os.CreateTemp("", archive.TempPattern("open", ".zip"))
 	if err != nil {
 		return nil, err
 	}

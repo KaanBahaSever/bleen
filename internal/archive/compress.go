@@ -61,7 +61,7 @@ func Compress(src io.Reader, name string, sizeHint int64, tmpDir string) (*Compr
 	sp := &Spool{}
 	var out io.Writer
 	if sizeHint > MemSpoolLimit {
-		f, err := os.CreateTemp(tmpDir, "bleen-spool-*")
+		f, err := os.CreateTemp(tmpDir, TempPattern("spool", ""))
 		if err != nil {
 			return nil, err
 		}

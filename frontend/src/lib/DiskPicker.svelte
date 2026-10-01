@@ -12,6 +12,10 @@
   let encrypt = $state(false);
   let pw = $state('');
   let pw2 = $state('');
+  $effect(() => {
+    void pw, void pw2, void encrypt;
+    error = ''; // an old password error must not stay after the fix
+  });
 
   onMount(async () => {
     drives = (await api.Drives()) ?? [];

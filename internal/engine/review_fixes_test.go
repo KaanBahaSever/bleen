@@ -210,3 +210,31 @@ func TestRestoredFilesAreReadable(t *testing.T) {
 		}
 	}
 }
+
+// TestCleanupTempRemovesFilesOfDeadProcesses: temp files of a bleen that
+// was killed go at once; files of running ones, and unknown names, stay.
+func TestCleanupTempRemovesFilesOfDeadProcesses(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("TMP", dir)
+	t.Setenv("TEMP", dir)
+	t.Setenv("TMPDIR", dir)
+	mine := filepath.Join(dir, fmt.Sprintf("bleen-spool-%d-1", os.Getpid()))
+	dead := filepath.Join(dir, "bleen-spool-999999999-1")
+	old := filepath.Join(dir, "bleen-spool-12345") // older naming, no pid
+	for _, p := range []string{mine, dead, old} {
+		os.WriteFile(p, []byte("x"), 0o644)
+	}
+	CleanupTemp()
+	if _, err := os.Stat(dead); err == nil {
+		t.Error("a dead process's temp file was kept")
+	}
+	if _, err := os.Stat(mine); err != nil {
+		t.Error("this process's temp file was removed")
+	}
+	if _, err := os.Stat(old); err != nil {
+		t.Error("a recent file without a pid was removed")
+	}
+	if pid, ok := tempPID("bleen-catalog-4242-998877.db"); !ok || pid != 4242 {
+		t.Errorf("tempPID: %d %v", pid, ok)
+	}
+}

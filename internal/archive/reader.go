@@ -119,7 +119,7 @@ func Plain(path string, key Opener, tmpDir string) (plain string, cleanup func()
 	if key == nil {
 		return "", nil, errors.New("E_PASSWORD_REQUIRED")
 	}
-	f, err := os.CreateTemp(tmpDir, "bleen-open-*.zip")
+	f, err := os.CreateTemp(tmpDir, TempPattern("open", ".zip"))
 	if err != nil {
 		return "", nil, err
 	}
@@ -139,4 +139,10 @@ func ReadManifestAny(path string, key Opener) (*Manifest, error) {
 	}
 	defer cleanup()
 	return ReadManifest(p)
+}
+
+// TempPattern names bleen's temporary files "bleen-<kind>-<pid>-*<ext>", so
+// that files left by a bleen that was killed can be recognised and removed.
+func TempPattern(kind, ext string) string {
+	return fmt.Sprintf("bleen-%s-%d-*%s", kind, os.Getpid(), ext)
 }

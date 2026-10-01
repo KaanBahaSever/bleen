@@ -1,6 +1,6 @@
 <script lang="ts">
   import Sheet from './Sheet.svelte';
-  import { t } from '../store.svelte';
+  import { errText, t, toast } from '../store.svelte';
 
   let {
     title,
@@ -15,6 +15,8 @@
     busy = true;
     try {
       await onconfirm();
+    } catch (e) {
+      toast(errText(e));
     } finally {
       busy = false;
       onclose();

@@ -286,6 +286,9 @@ func (v *Vault) lock(breakLock bool) error {
 	return errors.New("could not lock the backup folder")
 }
 
+// ProcessRunning reports whether a process with this id is running.
+func ProcessRunning(pid int) bool { return processAlive(pid) }
+
 // holderRunning reports whether the bleen that wrote a lock on this computer
 // may still be running. A process ID is reused after a reboot or a crash: a
 // live process that started after the lock was written is someone else.
@@ -336,7 +339,7 @@ func (v *Vault) readCatalogFile(src string) (*catalog.DB, error) {
 }
 
 func (v *Vault) loadCatalog() error {
-	f, err := os.CreateTemp("", "bleen-catalog-*.db")
+	f, err := os.CreateTemp("", archive.TempPattern("catalog", ".db"))
 	if err != nil {
 		return err
 	}

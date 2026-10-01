@@ -197,3 +197,19 @@ func TestDestProblem(t *testing.T) {
 		}
 	}
 }
+
+// TestExportNeedsAFileName: a folder (or a path ending in a separator) is
+// not a ZIP name; it must not become a file called ".zip".
+func TestExportNeedsAFileName(t *testing.T) {
+	home(t)
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := t.TempDir()
+	for _, dest := range []string{d, d + string(filepath.Separator), d + string(filepath.Separator) + ". "} {
+		if _, err := a.Export("x", "y", dest, nil); err == nil || err.Error() != "E_DEST_NOT_FILE" {
+			t.Errorf("%q: %v", dest, err)
+		}
+	}
+}
