@@ -11,6 +11,8 @@ export function AddSourceAs(arg1:string,arg2:string,arg3:string):Promise<app.Sou
 
 export function BackupNow(arg1:Array<string>,arg2:boolean):Promise<string>;
 
+export function BreakLock():Promise<void>;
+
 export function Browse(arg1:string,arg2:string,arg3:string):Promise<app.BrowseResult>;
 
 export function Cancel():Promise<void>;
@@ -22,6 +24,8 @@ export function ChooseFolder(arg1:string,arg2:string):Promise<string>;
 export function ConfirmPlan(arg1:boolean):Promise<void>;
 
 export function DismissJob():Promise<void>;
+
+export function DismissNotice():Promise<void>;
 
 export function Drives():Promise<Array<platform.Volume>>;
 

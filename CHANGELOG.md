@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.0-beta.2
+
+Safety release after a full review. Please update. / Kapsamlı incelemenin ardından güvenlik sürümü; lütfen güncelleyin.
+
+- **New:** macOS (`bleen-macos-universal.zip`) and Linux (`bleen-linux-amd64.tar.gz`) desktop apps; connect to a network share with a user name and password (Windows)
+- **Fixed (data):** moved files are stored again, so hand restores are complete; an unreadable or online-only (OneDrive) file is never recorded as deleted; OneDrive files are backed up; full backups get the empty-folder and mass-change guards; old backups are kept while the newest full backup skipped files; FAT32 disks no longer fail on very large files
+- **Fixed (disk):** an unreadable catalog is never silently replaced; a stale lock from a crashed bleen is removed; a different bleen disk at the same drive letter is detected; recovery works for folder names with [ ]
+- **Fixed (app):** the quit dialog's Yes/No; "Restore latest state" restores the latest backup; a double click can't approve the next warning; messages no longer say "verified" when there were problems
+
 ## 0.2.0-beta.1
 
 First public beta. / İlk herkese açık beta.

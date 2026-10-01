@@ -92,7 +92,7 @@ func RunScheduled() error {
 	if m, err := vault.ReadMeta(vc.Path); err == nil && m.Encrypted() {
 		return fail("E_AUTOMATION_ENCRYPTED", "scheduled backup: encrypted disks need your password")
 	}
-	v, err := vault.Open(vc.Path, vault.OpenOptions{})
+	v, err := openJobVault(vc.Path, vc.ID, nil)
 	if err != nil {
 		return fail(toJobError(err).Code, err.Error())
 	}
@@ -107,7 +107,7 @@ func RunScheduled() error {
 			Name:            s.Name,
 			AutoFullEvery:   a.cfg.Backup.NewFullEvery,
 			MassChangeRatio: a.cfg.Backup.MassChangeGuard,
-			Confirm:         func(p *engine.Plan) bool { return !p.MassChange },
+			// Confirm is nil: a mass change fails the run with E_MASS_CHANGE.
 		})
 		rec := RunRecord{ID: uuid.NewString(), Kind: "backup", Source: s.Name + " ⏰", StartedAt: started, FinishedAt: time.Now()}
 		switch {

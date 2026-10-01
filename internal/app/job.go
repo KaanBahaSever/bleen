@@ -6,6 +6,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"sync"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/kaanbahasever/bleen/internal/archive"
 	"github.com/kaanbahasever/bleen/internal/config"
 	"github.com/kaanbahasever/bleen/internal/engine"
+	"github.com/kaanbahasever/bleen/internal/seal"
 	"github.com/kaanbahasever/bleen/internal/source"
 	"github.com/kaanbahasever/bleen/internal/vault"
 )
@@ -130,7 +133,10 @@ func (a *App) update(j *job, throttle bool, f func(*JobState)) {
 	a.Emit("job", st)
 }
 
+// finish ends a job. The caller must have closed the vault already, so the
+// lock is gone before anyone (Shutdown, the next job) sees the job as done.
 func (a *App) finish(j *job, phase Phase, err error) {
+	a.refreshVault()
 	a.update(j, false, func(s *JobState) {
 		s.Phase = phase
 		if err != nil {
@@ -138,8 +144,23 @@ func (a *App) finish(j *job, phase Phase, err error) {
 		}
 	})
 	close(j.finished)
-	a.refreshVault()
 }
+
+// openJobVault opens the disk in use and makes sure it is the disk the
+// user chose, not another bleen disk mounted at the same path.
+func openJobVault(path, id string, key *seal.Key) (*vault.Vault, error) {
+	v, err := vault.Open(path, vault.OpenOptions{Key: key})
+	if err != nil {
+		return nil, err
+	}
+	if id != "" && v.Meta.ID != id {
+		v.Close()
+		return nil, errors.New("E_FOREIGN_VAULT")
+	}
+	return v, nil
+}
+
+var codeRe = regexp.MustCompile(`E_[A-Z_]+`)
 
 func toJobError(err error) *JobError {
 	var e *engine.Error
@@ -150,6 +171,12 @@ func toJobError(err error) *JobError {
 	if errors.As(err, &le) {
 		return &JobError{Code: "E_VAULT_LOCKED", Message: le.Error()}
 	}
+	if errors.Is(err, os.ErrNotExist) {
+		return &JobError{Code: "E_VAULT_DISCONNECTED", Message: err.Error()}
+	}
+	if c := codeRe.FindString(err.Error()); c != "" {
+		return &JobError{Code: c, Message: err.Error()}
+	}
 	return &JobError{Code: "E_UNKNOWN", Message: err.Error()}
 }
 
@@ -157,8 +184,12 @@ func toJobError(err error) *JobError {
 func (a *App) ConfirmPlan(ok bool) {
 	a.mu.Lock()
 	j := a.job
+	waiting := j != nil && j.state.Phase == PhaseAwaiting
+	if waiting {
+		j.state.Phase = PhaseRunning // further clicks are ignored
+	}
 	a.mu.Unlock()
-	if j != nil {
+	if waiting {
 		select {
 		case j.confirm <- ok:
 		default:
@@ -183,8 +214,9 @@ func (a *App) Resume() { a.setPaused(false) }
 func (a *App) setPaused(on bool) {
 	a.mu.Lock()
 	j := a.job
+	done := j == nil || j.state.done()
 	a.mu.Unlock()
-	if j == nil || j.state.done() {
+	if done {
 		return
 	}
 	if on {
@@ -247,7 +279,7 @@ func (a *App) BackupNow(ids []string, full bool) (string, error) {
 	excludes := append(append([]string{}, source.DefaultExcludes...), a.cfg.Backup.Exclude...)
 	guard := a.cfg.Backup.MassChangeGuard
 	fullEvery, keep := a.cfg.Backup.NewFullEvery, a.cfg.Backup.KeepGenerations
-	vaultPath := a.cfg.Vault.Path
+	vaultPath, vaultID := a.cfg.Vault.Path, a.cfg.Vault.ID
 	key := a.vaultKeyLocked()
 	a.mu.Unlock()
 	if len(srcs) == 0 {
@@ -260,12 +292,11 @@ func (a *App) BackupNow(ids []string, full bool) (string, error) {
 	a.emitState()
 
 	go func() {
-		v, err := vault.Open(vaultPath, vault.OpenOptions{Key: key})
+		v, err := openJobVault(vaultPath, vaultID, key)
 		if err != nil {
 			a.finish(j, PhaseFailed, err)
 			return
 		}
-		defer v.Close()
 		var lastErr error
 		cancelled := false
 		for i, s := range srcs {
@@ -284,6 +315,10 @@ func (a *App) BackupNow(ids []string, full bool) (string, error) {
 				Confirm: func(pl *engine.Plan) bool {
 					if !confirmAlways && !pl.MassChange {
 						return true
+					}
+					select { // drop any stale answer
+					case <-j.confirm:
+					default:
 					}
 					a.update(j, false, func(st *JobState) { st.Phase, st.Plan = PhaseAwaiting, pl })
 					select {
@@ -320,6 +355,7 @@ func (a *App) BackupNow(ids []string, full bool) (string, error) {
 				break
 			}
 		}
+		v.Close()
 		switch {
 		case cancelled:
 			a.finish(j, PhaseCancelled, nil)
@@ -335,23 +371,26 @@ func (a *App) BackupNow(ids []string, full bool) (string, error) {
 // Restore restores a backup (or only some paths of it) into dest.
 func (a *App) Restore(sourceID, backupID, dest string, paths []string) (string, error) {
 	a.mu.Lock()
-	vaultPath := a.cfg.Vault.Path
+	vaultPath, vaultID := a.cfg.Vault.Path, a.cfg.Vault.ID
 	key := a.vaultKeyLocked()
 	a.mu.Unlock()
+	if !filepath.IsAbs(dest) {
+		return "", errors.New("E_NOT_ABSOLUTE")
+	}
 	j, err := a.newJob("restore", 1)
 	if err != nil {
 		return "", err
 	}
 	a.update(j, false, func(s *JobState) { s.Phase, s.Dest = PhaseRunning, dest })
 	go func() {
-		v, err := vault.Open(vaultPath, vault.OpenOptions{Key: key})
+		v, err := openJobVault(vaultPath, vaultID, key)
 		if err != nil {
 			a.finish(j, PhaseFailed, err)
 			return
 		}
-		defer v.Close()
 		src, err := v.Catalog.FindSource(sourceID)
 		if err != nil || src == nil {
+			v.Close()
 			a.finish(j, PhaseFailed, errors.New(engine.ENotFound))
 			return
 		}
@@ -360,15 +399,21 @@ func (a *App) Restore(sourceID, backupID, dest string, paths []string) (string, 
 		rep, err := engine.Restore(j.ctx, v, src, engine.RestoreOptions{
 			Snapshot: backupID, Dest: dest, Paths: paths, Progress: progress{a, j},
 		})
+		v.Close()
 		rec := RunRecord{ID: uuid.NewString(), Kind: "restore", Source: src.Name, StartedAt: started, FinishedAt: time.Now(), Dest: dest}
 		if err != nil {
 			rec.Result, rec.Error = "failed", toJobError(err)
+			phase := PhaseFailed
+			if rec.Error.Code == engine.ECancelled {
+				rec.Result, phase = "cancelled", PhaseCancelled
+			}
 			a.record(rec)
 			a.update(j, false, func(s *JobState) { s.Results = append(s.Results, rec) })
-			a.finish(j, PhaseFailed, err)
+			a.finish(j, phase, err)
 			return
 		}
-		rec.Result, rec.Files, rec.Bytes, rec.Issues, rec.Verified = "done", rep.Files, rep.Bytes, rep.Issues, true
+		rec.Result, rec.Files, rec.Bytes, rec.Issues = "done", rep.Files, rep.Bytes, rep.Issues
+		rec.Verified = len(rep.Issues) == 0
 		rec.Dest = rep.Dest
 		a.record(rec)
 		a.update(j, false, func(s *JobState) { s.Results = append(s.Results, rec) })
@@ -380,7 +425,7 @@ func (a *App) Restore(sourceID, backupID, dest string, paths []string) (string, 
 // CheckBackups re-reads every archive on the disk ("verify").
 func (a *App) CheckBackups() (string, error) {
 	a.mu.Lock()
-	vaultPath := a.cfg.Vault.Path
+	vaultPath, vaultID := a.cfg.Vault.Path, a.cfg.Vault.ID
 	key := a.vaultKeyLocked()
 	a.mu.Unlock()
 	j, err := a.newJob("verify", 1)
@@ -389,14 +434,14 @@ func (a *App) CheckBackups() (string, error) {
 	}
 	a.update(j, false, func(s *JobState) { s.Phase = PhaseVerifying })
 	go func() {
-		v, err := vault.Open(vaultPath, vault.OpenOptions{Key: key})
+		v, err := openJobVault(vaultPath, vaultID, key)
 		if err != nil {
 			a.finish(j, PhaseFailed, err)
 			return
 		}
-		defer v.Close()
 		started := time.Now()
 		rep, err := engine.VerifyVault(j.ctx, v, progress{a, j})
+		v.Close()
 		rec := RunRecord{ID: uuid.NewString(), Kind: "verify", StartedAt: started, FinishedAt: time.Now()}
 		if err != nil {
 			rec.Result, rec.Error = "failed", toJobError(err)
@@ -435,19 +480,49 @@ func (a *App) record(r RunRecord) {
 	historyMu.Lock()
 	defer historyMu.Unlock()
 	a.mu.Lock()
-	a.history = append([]RunRecord{r}, a.history...)
-	if len(a.history) > 200 {
-		a.history = a.history[:200]
-	}
-	b, _ := json.MarshalIndent(a.history, "", " ")
 	dir := a.cfg.Dir()
 	a.mu.Unlock()
+	// Merge with the file: a scheduled run may have added records while the
+	// window was open.
+	merged := []RunRecord{r}
+	seen := map[string]bool{r.ID: true}
+	a.mu.Lock()
+	mem := append([]RunRecord{}, a.history...)
+	a.mu.Unlock()
+	for _, list := range [][]RunRecord{loadHistory(dir), mem} {
+		for _, x := range list {
+			if !seen[x.ID] {
+				seen[x.ID] = true
+				merged = append(merged, x)
+			}
+		}
+	}
+	sort.SliceStable(merged, func(i, j int) bool { return merged[i].StartedAt.After(merged[j].StartedAt) })
+	if len(merged) > 200 {
+		merged = merged[:200]
+	}
+	b, _ := json.MarshalIndent(merged, "", " ")
 	os.MkdirAll(dir, 0o755)
-	os.WriteFile(historyPath(dir), b, 0o644)
+	tmp := historyPath(dir) + ".tmp"
+	if os.WriteFile(tmp, b, 0o644) == nil {
+		os.Rename(tmp, historyPath(dir))
+	}
+	a.mu.Lock()
+	a.history = merged
+	a.mu.Unlock()
 }
 
 // Activity returns past runs, newest first.
 func (a *App) Activity() []RunRecord {
+	a.mu.Lock()
+	dir := a.cfg.Dir()
+	a.mu.Unlock()
+	if h := loadHistory(dir); h != nil {
+		a.mu.Lock()
+		a.history = h
+		a.mu.Unlock()
+		return h
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return append([]RunRecord{}, a.history...)

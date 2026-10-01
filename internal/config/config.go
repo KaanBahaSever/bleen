@@ -6,10 +6,15 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/pelletier/go-toml/v2"
 )
+
+// ErrReset means config.toml could not be read and defaults are used; the
+// old file was renamed to config.toml.broken-<time>.
+var ErrReset = errors.New("settings file was unreadable and has been reset")
 
 type Config struct {
 	Version    int        `toml:"version"`
@@ -95,7 +100,12 @@ func Load(dir string) (*Config, error) {
 		return nil, err
 	}
 	if err := toml.Unmarshal(b, c); err != nil {
-		return nil, err
+		// Keep the broken file for inspection and start with defaults
+		// instead of refusing to start.
+		os.Rename(c.path, c.path+".broken-"+time.Now().Format("20060102-150405"))
+		d := defaults()
+		d.path = c.path
+		return d, ErrReset
 	}
 	if c.Vault.Path != "" {
 		c.RememberVault(c.Vault)

@@ -41,8 +41,10 @@ type App struct {
 	reach     map[string]*bool // source id → reachable (nil = checking)
 	job       *job
 	history   []RunRecord
-	key       *seal.Key // unlocked key of an encrypted disk (memory only)
-	keyVault  string    // which disk the key belongs to
+	notice    string       // one-time message for the UI (e.g. settings were reset)
+	known     []KnownVault // known disks with their connection state
+	key       *seal.Key    // unlocked key of an encrypted disk (memory only)
+	keyVault  string       // which disk the key belongs to
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -54,10 +56,14 @@ func New() (*App, error) {
 		return nil, err
 	}
 	cfg, err := config.Load(dir)
+	notice := ""
+	if errors.Is(err, config.ErrReset) {
+		notice, err = "E_CONFIG_RESET", nil
+	}
 	if err != nil {
 		return nil, err
 	}
-	a := &App{cfg: cfg, reach: map[string]*bool{}, Emit: func(string, any) {}}
+	a := &App{cfg: cfg, reach: map[string]*bool{}, Emit: func(string, any) {}, notice: notice}
 	a.history = loadHistory(cfg.Dir())
 	return a, nil
 }
@@ -115,7 +121,7 @@ func (a *App) watch() {
 			return
 		case <-vt.C:
 			a.mu.Lock()
-			p, was, busy := a.cfg.Vault.Path, a.vaultInfo != nil && a.vaultInfo.Connected, a.job != nil
+			p, was, busy := a.cfg.Vault.Path, a.vaultInfo != nil && a.vaultInfo.Connected, a.job != nil && !a.job.state.done()
 			a.mu.Unlock()
 			if p != "" && !busy && vault.IsVault(p) != was {
 				a.refreshVault()
@@ -143,6 +149,7 @@ type State struct {
 	KeepGenerations  int           `json:"keepGenerations"`
 	NewFullEvery     int           `json:"newFullEvery"`
 	Automation       Automation    `json:"automation"`
+	Notice           string        `json:"notice"`
 }
 
 // Automation is the opt-in daily backup as the UI shows it.
@@ -193,6 +200,7 @@ func (a *App) stateLocked() State {
 		DefaultExclude:   source.DefaultExcludes,
 		Vault:            a.vaultInfo,
 		Vaults:           a.knownVaultsLocked(),
+		Notice:           a.notice,
 		OS:               runtime.GOOS,
 		Sources:          []SourceState{},
 		KeepGenerations:  a.cfg.Backup.KeepGenerations,
@@ -288,13 +296,18 @@ func (a *App) AddSource(path string) (SourceState, error) {
 	if path == "" {
 		return SourceState{}, errors.New("E_EMPTY_PATH")
 	}
+	if !filepath.IsAbs(path) {
+		return SourceState{}, errors.New("E_NOT_ABSOLUTE")
+	}
 	if err := probe(path, 8*time.Second); err != nil {
 		return SourceState{}, err
 	}
 	a.mu.Lock()
-	if a.cfg.Vault.Path != "" && isInside(path, a.cfg.Vault.Path) {
-		a.mu.Unlock()
-		return SourceState{}, errors.New("E_SOURCE_IS_VAULT")
+	for _, kv := range a.cfg.Vaults {
+		if kv.Path != "" && (isInside(path, kv.Path) || isInside(kv.Path, path)) {
+			a.mu.Unlock()
+			return SourceState{}, errors.New("E_SOURCE_IS_VAULT")
+		}
 	}
 	s := a.cfg.AddSource(path, "")
 	t := true
@@ -394,18 +407,60 @@ type KnownVault struct {
 }
 
 func (a *App) knownVaultsLocked() []KnownVault {
+	conn := map[string]bool{}
+	for _, k := range a.known {
+		conn[k.ID] = k.Connected
+	}
 	out := []KnownVault{}
 	for _, v := range a.cfg.Vaults {
 		out = append(out, KnownVault{ID: v.ID, Label: v.Label, Path: v.Path,
-			Connected: vault.IsVault(v.Path), Active: v.ID == a.cfg.Vault.ID})
+			Connected: conn[v.ID], Active: v.ID == a.cfg.Vault.ID})
 	}
 	return out
+}
+
+// probeKnownVaults checks which known disks are plugged in (outside the lock).
+func (a *App) probeKnownVaults() {
+	a.mu.Lock()
+	list := append([]config.Vault{}, a.cfg.Vaults...)
+	a.mu.Unlock()
+	out := make([]KnownVault, 0, len(list))
+	for _, v := range list {
+		ok := false
+		if m, err := vault.ReadMeta(v.Path); err == nil && m.ID == v.ID {
+			ok = true
+		}
+		out = append(out, KnownVault{ID: v.ID, Connected: ok})
+	}
+	a.mu.Lock()
+	a.known = out
+	a.mu.Unlock()
+}
+
+// BreakLock removes the lock of the disk in use, for a lock left behind by a
+// bleen that is certainly not running (for example on another computer).
+func (a *App) BreakLock() error {
+	a.mu.Lock()
+	p := a.cfg.Vault.Path
+	busy := a.job != nil && !a.job.state.done()
+	a.mu.Unlock()
+	if busy || p == "" {
+		return errors.New("E_BUSY")
+	}
+	if err := vault.BreakLock(p); err != nil {
+		return err
+	}
+	a.refreshVault()
+	return nil
 }
 
 // UseVaultFolder sets the backup disk. It uses an existing bleen folder or
 // creates "<dir>/bleen", encrypted with password when one is given.
 func (a *App) UseVaultFolder(dir, password string) (VaultState, error) {
 	dir = filepath.Clean(strings.TrimSpace(dir))
+	if !filepath.IsAbs(dir) {
+		return VaultState{}, errors.New("E_NOT_ABSOLUTE")
+	}
 	root := dir
 	switch {
 	case vault.IsVault(dir):
@@ -441,6 +496,9 @@ func (a *App) UseVaultFolder(dir, password string) (VaultState, error) {
 	meta, err := vault.ReadMeta(root)
 	if err != nil {
 		return VaultState{}, err
+	}
+	if password != "" && !meta.Encrypted() {
+		return VaultState{}, errors.New("E_VAULT_NOT_ENCRYPTED")
 	}
 	var key *seal.Key
 	if meta.Encrypted() && password != "" {
@@ -538,6 +596,7 @@ func (a *App) vaultKeyLocked() *seal.Key {
 // refreshVault re-reads the disk: connection, free space and a read-only
 // copy of the catalog for Home and History.
 func (a *App) refreshVault() {
+	a.probeKnownVaults()
 	a.mu.Lock()
 	vc := a.cfg.Vault
 	a.mu.Unlock()
@@ -576,6 +635,32 @@ func (a *App) refreshVault() {
 		a.setView(info, nil)
 		return
 	}
+	if vc.ID != "" && meta.ID != vc.ID {
+		// Another bleen disk is mounted at this path. If it is one of ours,
+		// switch to it; otherwise treat the remembered disk as unplugged.
+		a.mu.Lock()
+		var other *config.Vault
+		for _, kv := range a.cfg.Vaults {
+			if kv.ID == meta.ID {
+				kv := kv
+				kv.Path = vc.Path
+				other = &kv
+			}
+		}
+		if other != nil {
+			a.cfg.Vault = *other
+			a.cfg.RememberVault(*other)
+			a.save()
+		}
+		a.mu.Unlock()
+		if other != nil {
+			a.refreshVault()
+			return
+		}
+		info.Connected, info.Error = false, "E_FOREIGN_VAULT"
+		a.setView(info, nil)
+		return
+	}
 	info.Encrypted = meta.Encrypted()
 	a.mu.Lock()
 	key := a.vaultKeyLocked()
@@ -594,9 +679,13 @@ func (a *App) refreshVault() {
 
 func (a *App) connectedKnownVault(except string) *config.Vault {
 	a.mu.Lock()
-	defer a.mu.Unlock()
-	for _, v := range a.cfg.Vaults {
-		if v.ID != except && vault.IsVault(v.Path) {
+	list := append([]config.Vault{}, a.cfg.Vaults...)
+	a.mu.Unlock()
+	for _, v := range list {
+		if v.ID == except {
+			continue
+		}
+		if m, err := vault.ReadMeta(v.Path); err == nil && m.ID == v.ID {
 			v := v
 			return &v
 		}
@@ -673,8 +762,8 @@ func findMovedVault(vc config.Vault) string {
 		return ""
 	}
 	rest := vc.Path[len(vol):]
-	for c := 'A'; c <= 'Z'; c++ {
-		cand := string(c) + ":" + rest
+	for _, d := range platform.Volumes() {
+		cand := filepath.VolumeName(d.Path) + rest
 		if strings.EqualFold(cand, vc.Path) || !vault.IsVault(cand) {
 			continue
 		}
@@ -848,4 +937,11 @@ func (a *App) SuggestRestoreFolder(name string, at time.Time) string {
 		}
 		p = filepath.Join(base, n+" "+strconv.Itoa(i))
 	}
+}
+
+// DismissNotice clears the one-time message shown at start.
+func (a *App) DismissNotice() {
+	a.mu.Lock()
+	a.notice = ""
+	a.mu.Unlock()
 }

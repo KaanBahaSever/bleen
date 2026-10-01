@@ -39,6 +39,8 @@ func (b *Bridge) Pause()                                            { b.a.Pause(
 func (b *Bridge) Resume()                                           { b.a.Resume() }
 func (b *Bridge) Unlock(password string) error                      { return b.a.Unlock(password) }
 func (b *Bridge) Lock()                                             { b.a.Lock() }
+func (b *Bridge) BreakLock() error                                  { return b.a.BreakLock() }
+func (b *Bridge) DismissNotice()                                    { b.a.DismissNotice() }
 func (b *Bridge) SwitchVault(id string) error                       { return b.a.SwitchVault(id) }
 func (b *Bridge) ForgetVault(id string) error                       { return b.a.ForgetVault(id) }
 func (b *Bridge) SetRetention(keep, newFullEvery int) error {

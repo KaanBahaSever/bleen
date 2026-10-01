@@ -12,6 +12,16 @@
   const pct = $derived(p && p.bytesTotal > 0 ? (p.bytesDone / p.bytesTotal) * 100 : p?.filesTotal ? (p.filesDone / p.filesTotal) * 100 : 0);
   const finished = $derived(['done', 'failed', 'cancelled'].includes(job.phase));
   let showIssues = $state(false);
+  // One answer per preflight: a double click must not approve the next plan.
+  let answeredPlan = $state<unknown>(null);
+  function answer(ok: boolean) {
+    answeredPlan = job.plan;
+    api.ConfirmPlan(ok);
+  }
+  async function breakLock() {
+    await api.BreakLock();
+    api.DismissJob();
+  }
 
   // ETA from throughput since the copy phase started.
   let startedAt = 0;
@@ -134,7 +144,11 @@
     {:else if finished}
       {#if job.phase === 'failed' && job.error && !(job.results ?? []).length}
         <div class="rounded-xl bg-bad-bg p-4 text-bad">
-          <p class="font-semibold">{errText(job.error.code)}</p>
+          <p class="font-semibold">{job.error.code === 'E_CHECKSUM_MISMATCH' ? t('run.newArchiveBad') : errText(job.error.code)}</p>
+          {#if job.error.code === 'E_VAULT_LOCKED'}
+            <button class="btn btn-secondary mt-3" onclick={breakLock}>{t('run.breakLock')}</button>
+            <p class="mt-1 text-[12px] opacity-80">{t('run.breakLock.hint')}</p>
+          {/if}
           <p class="selectable mt-1 text-[12px] opacity-80">{job.error.message}</p>
         </div>
       {/if}
@@ -164,7 +178,11 @@
               {#if r.result === 'done'}
                 <p class="check"><Check size={16} />{t('run.restored', { n: fmtNumber(lang(), r.files) })} ({fmtSize(lang(), r.bytes)})</p>
                 <p class="ml-6 truncate font-mono text-[12px] text-muted">{t('run.restoredTo', { dest: r.dest ?? '' })}</p>
-                <p class="check"><Check size={16} />{t('run.allVerified')}</p>
+                {#if r.verified}
+                  <p class="check"><Check size={16} />{t('run.allVerified')}</p>
+                {:else}
+                  <p class="flex items-center gap-2 font-semibold text-bad"><CircleAlert size={16} />{t('run.restoreIssues', { n: r.issues?.length ?? 0 })}</p>
+                {/if}
               {:else}
                 <div class="rounded-xl bg-bad-bg p-3 text-bad"><p class="text-[13px]">{errText(r.error?.code)}</p></div>
               {/if}
@@ -182,7 +200,7 @@
         <div class="mt-4 rounded-xl bg-warn-bg p-3 text-warn">
           <button class="flex w-full items-center gap-2 text-left font-semibold" onclick={() => (showIssues = !showIssues)}>
             <TriangleAlert size={16} />
-            <span class="flex-1">{t('run.ok.skipped', { n: allIssues.length })}</span>
+            <span class="flex-1">{job.kind === 'backup' ? t('run.ok.skipped', { n: allIssues.length }) : t('run.problems', { n: allIssues.length })}</span>
             <span class="text-[12px] underline">{t('run.showIssues')}</span>
           </button>
           {#if showIssues}
@@ -199,8 +217,8 @@
 
   <div class="mt-7 flex justify-end gap-2">
     {#if job.phase === 'awaiting'}
-      <button class="btn btn-ghost" onclick={() => api.ConfirmPlan(false)}>{t('common.cancel')}</button>
-      <button class="btn btn-primary" onclick={() => api.ConfirmPlan(true)}>
+      <button class="btn btn-ghost" disabled={answeredPlan === job.plan} onclick={() => answer(false)}>{t('common.cancel')}</button>
+      <button class="btn btn-primary" disabled={answeredPlan === job.plan} onclick={() => answer(true)}>
         {job.plan?.massChange ? t('run.mass.confirm') : t('run.start')}
       </button>
     {:else if !finished}

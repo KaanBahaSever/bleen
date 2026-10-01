@@ -71,11 +71,11 @@ func (l *lifecycle) beforeClose(ctx context.Context) bool {
 		return false
 	}
 	tr := isTurkish(l.b.a.GetState().Language)
-	title, msg, stop, keep := "bleen", "A backup is running. Stop it and quit?\n\nYour earlier backups are not affected.",
-		"Stop & quit", "Keep backing up"
+	title, msg, stop, keep := "bleen", "bleen is still working. Stop and quit?\n\nYour earlier backups are not affected. A restore that is stopped leaves a partly restored folder.",
+		"Stop & quit", "Keep working"
 	if tr {
-		msg = "Bir yedekleme sürüyor. Durdurup çıkılsın mı?\n\nÖnceki yedeklerin etkilenmez."
-		stop, keep = "Durdur ve çık", "Yedeklemeye devam et"
+		msg = "bleen hâlâ çalışıyor. Durdurup çıkılsın mı?\n\nÖnceki yedeklerin etkilenmez. Durdurulan bir geri yükleme, yarım kalmış bir klasör bırakır."
+		stop, keep = "Durdur ve çık", "Çalışmaya devam et"
 	}
 	res, err := runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
 		Type: runtime.QuestionDialog, Title: title, Message: msg,
@@ -84,8 +84,9 @@ func (l *lifecycle) beforeClose(ctx context.Context) bool {
 	if err != nil {
 		return true
 	}
-	// Windows returns "Yes"/"No" for two-button question dialogs.
-	if res == stop || res == "No" {
+	// On Windows, Wails shows a Yes/No box and returns "Yes" or "No"; the
+	// question is "Stop and quit?", so "Yes" means stop.
+	if res == stop || res == "Yes" {
 		l.b.a.Cancel()
 		deadline := time.Now().Add(10 * time.Second)
 		for l.b.a.Busy() && time.Now().Before(deadline) {

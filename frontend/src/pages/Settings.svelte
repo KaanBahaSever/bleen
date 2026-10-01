@@ -12,10 +12,11 @@
   let adding = $state(false);
   let autoTime = $state(store.state?.automation?.time || '18:00');
 
-  async function setAuto(on: boolean, at: string) {
+  async function setAuto(on: boolean, at: string, el?: HTMLInputElement) {
     try {
       await api.SetAutomation(on, at);
     } catch (e) {
+      if (el) el.checked = !on;
       toast(errText(e));
     }
   }
@@ -153,7 +154,7 @@
         <span class="block text-[12px] text-muted">{st.automation.supported ? t('set.auto.hint') : t('set.auto.unsupported')}</span>
       </span>
       <input type="checkbox" class="switch mt-1" disabled={!st.automation.supported} checked={st.automation.enabled}
-        onchange={(e) => setAuto(e.currentTarget.checked, autoTime)} />
+        onchange={(e) => setAuto(e.currentTarget.checked, autoTime, e.currentTarget)} />
     </label>
     {#if st.automation.enabled}
       <div class="mt-3 flex items-center gap-2 text-[13px]">

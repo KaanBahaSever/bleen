@@ -31,7 +31,7 @@
     if (r.result === 'failed') return errText(r.error?.code);
     if (r.result === 'cancelled') return t('act.cancelled');
     if (r.result === 'nothing') return t('act.nothing');
-    if (r.kind === 'verify') return t('run.verifyOk', { n: r.files });
+    if (r.kind === 'verify') return r.issues?.length ? t('act.verifyBad', { n: r.issues.length }) : t('run.verifyOk', { n: r.files });
     if (r.kind === 'restore') return `${t('run.restored', { n: fmtNumber(lang(), r.files) })} · ${fmtSize(lang(), r.bytes)}`;
     return `${t('run.ok.files', { n: fmtNumber(lang(), r.files) })} · ${fmtSize(lang(), r.stored)}`;
   }

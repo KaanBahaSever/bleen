@@ -18,6 +18,10 @@ export function BackupNow(arg1, arg2) {
   return window['go']['ui']['Bridge']['BackupNow'](arg1, arg2);
 }
 
+export function BreakLock() {
+  return window['go']['ui']['Bridge']['BreakLock']();
+}
+
 export function Browse(arg1, arg2, arg3) {
   return window['go']['ui']['Bridge']['Browse'](arg1, arg2, arg3);
 }
@@ -40,6 +44,10 @@ export function ConfirmPlan(arg1) {
 
 export function DismissJob() {
   return window['go']['ui']['Bridge']['DismissJob']();
+}
+
+export function DismissNotice() {
+  return window['go']['ui']['Bridge']['DismissNotice']();
 }
 
 export function Drives() {

@@ -423,6 +423,7 @@ export namespace app {
 	    keepGenerations: number;
 	    newFullEvery: number;
 	    automation: Automation;
+	    notice: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new State(source);
@@ -444,6 +445,7 @@ export namespace app {
 	        this.keepGenerations = source["keepGenerations"];
 	        this.newFullEvery = source["newFullEvery"];
 	        this.automation = this.convertValues(source["automation"], Automation);
+	        this.notice = source["notice"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

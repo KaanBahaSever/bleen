@@ -13,7 +13,7 @@
   let dir = $state('');
   let listing = $state<app.BrowseResult | null>(null);
   let selected = $state<string[]>([]);
-  let restoring = $state<{ paths: string[]; dest: string; date: string } | null>(null);
+  let restoring = $state<{ sourceId: string; backupId: string; paths: string[]; dest: string; date: string } | null>(null);
   let error = $state('');
   let unlocking = $state(false);
 
@@ -67,7 +67,7 @@
 
   async function startRestore(paths: string[], b: app.BackupInfo) {
     const dest = await api.SuggestRestoreFolder(source?.name ?? 'bleen', String(b.finishedAt));
-    restoring = { paths, dest, date: fmtDate(lang(), b.finishedAt) };
+    restoring = { sourceId, backupId: b.id, paths, dest, date: fmtDate(lang(), b.finishedAt) };
   }
 
   async function changeDest() {
@@ -76,9 +76,9 @@
   }
 
   async function go() {
-    if (!restoring || !backup) return;
+    if (!restoring) return;
     try {
-      await api.Restore(sourceId, backup.id, restoring.dest, restoring.paths);
+      await api.Restore(restoring.sourceId, restoring.backupId, restoring.dest, restoring.paths);
       restoring = null;
     } catch (e) {
       toast(errText(e));

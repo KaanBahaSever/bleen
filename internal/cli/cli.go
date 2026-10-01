@@ -149,6 +149,9 @@ func backupCmd() *cobra.Command {
 				}
 				ex = append(ex, strings.Split(strings.ReplaceAll(string(b), "\r\n", "\n"), "\n")...)
 			}
+			if name != "" && len(args) > 1 {
+				return errors.New("--name can only be used with one folder")
+			}
 			for i, a := range args {
 				abs, err := filepath.Abs(a)
 				if err != nil {
@@ -162,7 +165,10 @@ func backupCmd() *cobra.Command {
 					Name:     name,
 					Full:     full,
 					Progress: p,
-					Confirm:  confirmPlan(yes, allowMass),
+					Confirm:  confirmPlan(yes),
+					// With --yes or without a terminal there is nobody to ask:
+					// a mass change fails with E_MASS_CHANGE unless allowed.
+					AllowMassChange: allowMass,
 				}
 				rep, err := engine.Backup(cmd.Context(), v, source.NewLocal(abs, ex), opt)
 				p.done()
@@ -185,19 +191,11 @@ func backupCmd() *cobra.Command {
 	return c
 }
 
-func confirmPlan(yes, allowMass bool) func(*engine.Plan) bool {
+func confirmPlan(yes bool) func(*engine.Plan) bool {
+	if yes || !isTerminal(os.Stdin) {
+		return nil
+	}
 	return func(p *engine.Plan) bool {
-		if yes {
-			if p.MassChange && !allowMass {
-				fmt.Printf("\nStopped: %.0f%% of files changed or were deleted. This can mean ransomware or a wrong folder.\n"+
-					"Check the folder, then rerun with --allow-mass-change.\n", p.ChangedRatio*100)
-				return false
-			}
-			return true
-		}
-		if !isTerminal(os.Stdin) {
-			return !p.MassChange
-		}
 		if p.MassChange {
 			fmt.Printf("\n⚠  Unusually many changes: %.0f%% of files changed or were deleted.\n"+
 				"   This can mean ransomware or a wrong folder. Type 'yes' to continue: ", p.ChangedRatio*100)
@@ -212,7 +210,7 @@ func confirmPlan(yes, allowMass bool) func(*engine.Plan) bool {
 func printBackupReport(r *engine.Report) {
 	if r.NothingToDo {
 		fmt.Println("Nothing changed since the last backup. Your backup is still fresh.")
-		printIssues(r.Issues)
+		printIssues(r.Issues, true)
 		return
 	}
 	fmt.Printf("✓ %d files backed up (%d already on disk, stored as references)\n", r.FilesStored+r.FilesDeduped, r.FilesDeduped)
@@ -224,15 +222,19 @@ func printBackupReport(r *engine.Report) {
 	for _, a := range r.Archives {
 		fmt.Println("  →", a)
 	}
-	printIssues(r.Issues)
+	printIssues(r.Issues, true)
 	fmt.Printf("Done in %s.\n", r.Duration.Round(time.Second))
 }
 
-func printIssues(issues []archiveIssue) {
+func printIssues(issues []archiveIssue, backup bool) {
 	if len(issues) == 0 {
 		return
 	}
-	fmt.Printf("⚠ %d file(s) skipped; they will be tried again next time:\n", len(issues))
+	if backup {
+		fmt.Printf("⚠ %d file(s) skipped; they will be tried again next time:\n", len(issues))
+	} else {
+		fmt.Printf("⚠ %d problem(s):\n", len(issues))
+	}
 	for i, is := range issues {
 		if i == 20 {
 			fmt.Printf("  … and %d more\n", len(issues)-20)
@@ -328,8 +330,11 @@ func restoreCmd() *cobra.Command {
 			}
 			fmt.Printf("✓ %d files restored to %s (%s), as of %s\n", rep.Files, rep.Dest, size(rep.Bytes),
 				rep.Snapshot.FinishedAt.Local().Format("2006-01-02 15:04"))
+			printIssues(rep.Issues, false)
+			if len(rep.Issues) > 0 {
+				return fmt.Errorf("%d file(s) were not restored correctly", len(rep.Issues))
+			}
 			fmt.Println("✓ Every file verified (SHA-256)")
-			printIssues(rep.Issues)
 			return nil
 		},
 	}

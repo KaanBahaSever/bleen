@@ -70,6 +70,10 @@ export async function init() {
   const route = new URLSearchParams(location.search).get('route');
   if (import.meta.env.DEV && route) store.route = route as Route;
   applyTheme(s.theme);
+  if (s.notice === 'E_CONFIG_RESET') {
+    toast(t('notice.configReset'));
+    api.DismissNotice();
+  }
 }
 
 export async function backupNow(ids: string[] = [], full = false) {
