@@ -10,6 +10,10 @@ export function AddSource(arg1) {
   return window['go']['ui']['Bridge']['AddSource'](arg1);
 }
 
+export function AddSourceAs(arg1, arg2, arg3) {
+  return window['go']['ui']['Bridge']['AddSourceAs'](arg1, arg2, arg3);
+}
+
 export function BackupNow(arg1, arg2) {
   return window['go']['ui']['Bridge']['BackupNow'](arg1, arg2);
 }

@@ -1,8 +1,11 @@
-// Package platform holds the few OS-specific hooks bleen needs. Nothing here
-// installs services, autostart entries or scheduled tasks.
+// Package platform holds the few OS-specific hooks bleen needs. A scheduled
+// task is installed only when the user turns on automatic backups.
 package platform
 
-import "strings"
+import (
+	"errors"
+	"strings"
+)
 
 // FAT32MaxPart keeps archive parts under FAT32's 4 GiB file-size limit.
 const FAT32MaxPart int64 = 3900 << 20
@@ -27,3 +30,5 @@ func IsFAT32(fsType string) bool {
 	}
 	return false
 }
+
+var errNotWindows = errors.New("only available on Windows")

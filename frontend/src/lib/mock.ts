@@ -141,6 +141,7 @@ const Bridge: Record<string, (...a: any[]) => Promise<any>> = {
     emitState();
     return s;
   },
+  AddSourceAs: async (p) => Bridge.AddSource(p),
   RemoveSource: async (id) => ((state.sources = state.sources.filter((s: any) => s.id !== id)), emitState()),
   RenameSource: async () => {},
   Drives: async () => [

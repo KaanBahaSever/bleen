@@ -6,7 +6,9 @@ import (
 	"bytes"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"strconv"
 
 	"golang.org/x/sys/unix"
 )
@@ -27,9 +29,26 @@ func cstr(b []byte) string {
 	return string(b)
 }
 
-// KeepAwake is not implemented yet on this OS (planned: IOPMAssertion on
-// macOS, logind inhibitor on Linux).
-func KeepAwake() (release func()) { return func() {} }
+// KeepAwake prevents idle sleep until release is called, using the system's
+// own tool: caffeinate on macOS, systemd-inhibit on Linux. If the tool is
+// missing, backups still run; the computer may just sleep.
+func KeepAwake() (release func()) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("caffeinate", "-i", "-w", strconv.Itoa(os.Getpid()))
+	default:
+		cmd = exec.Command("systemd-inhibit", "--what=idle:sleep", "--who=bleen",
+			"--why=Backup in progress", "--mode=block", "sleep", "infinity")
+	}
+	if err := cmd.Start(); err != nil {
+		return func() {}
+	}
+	return func() {
+		cmd.Process.Kill()
+		cmd.Wait()
+	}
+}
 
 // FreeSpace returns the bytes available to the current user on dir's volume.
 func FreeSpace(dir string) (uint64, error) {
@@ -50,10 +69,30 @@ type Volume struct {
 	Total     uint64 `json:"total"`
 }
 
-// Volumes is not implemented yet here; users pick a folder instead.
-func Volumes() []Volume { return nil }
+func volumeAt(mount string) (Volume, bool) {
+	var st unix.Statfs_t
+	if err := unix.Statfs(mount, &st); err != nil {
+		return Volume{}, false
+	}
+	return Volume{
+		Path:      mount,
+		Label:     filepath.Base(mount),
+		FSType:    fsName(&st),
+		Removable: true,
+		Free:      uint64(st.Bavail) * uint64(st.Bsize),
+		Total:     uint64(st.Blocks) * uint64(st.Bsize),
+	}, true
+}
 
-func VolumeLabel(dir string) string { return "" }
+// VolumeLabel returns a friendly name for the volume holding dir.
+func VolumeLabel(dir string) string {
+	for _, v := range Volumes() {
+		if rel, err := filepath.Rel(v.Path, dir); err == nil && !filepath.IsAbs(rel) && rel != ".." && (len(rel) < 3 || rel[:3] != "../") {
+			return v.Label
+		}
+	}
+	return ""
+}
 
 // Reveal opens a folder in the file manager.
 func Reveal(path string) error {
@@ -71,4 +110,10 @@ func UILanguage() string {
 		}
 	}
 	return ""
+}
+
+// SaveShareCredential is Windows-only; elsewhere shares are mounted by the
+// system (Finder "Connect to Server", GNOME Files, /etc/fstab).
+func SaveShareCredential(server, share, user, password string) error {
+	return errNotWindows
 }

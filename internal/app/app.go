@@ -66,6 +66,12 @@ func New() (*App, error) {
 // probing sources, and noticing when the backup disk is plugged in.
 func (a *App) Start(ctx context.Context) {
 	a.ctx, a.cancel = context.WithCancel(ctx)
+	// Read-only catalog copies left behind if bleen was killed last time.
+	if old, _ := filepath.Glob(filepath.Join(a.cfg.Dir(), "view-*.db")); len(old) > 0 {
+		for _, f := range old {
+			os.Remove(f)
+		}
+	}
 	a.refreshVault()
 	a.probeSources()
 	go a.watch()

@@ -25,6 +25,9 @@ func (b *Bridge) SetExcludes(patterns []string) error { return b.a.SetExcludes(p
 func (b *Bridge) AddSource(path string) (app.SourceState, error) {
 	return b.a.AddSource(path)
 }
+func (b *Bridge) AddSourceAs(path, user, password string) (app.SourceState, error) {
+	return b.a.AddSourceAs(path, user, password)
+}
 func (b *Bridge) RemoveSource(id string) error       { return b.a.RemoveSource(id) }
 func (b *Bridge) RenameSource(id, name string) error { return b.a.RenameSource(id, name) }
 func (b *Bridge) Drives() []platform.Volume          { return b.a.Drives() }

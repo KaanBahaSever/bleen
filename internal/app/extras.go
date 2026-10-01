@@ -187,3 +187,32 @@ func humanSize(n int64) string {
 	}
 	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
 }
+
+// AddSourceAs connects to a network share with a user name and password
+// (kept by Windows, not by bleen) and then adds the folder.
+func (a *App) AddSourceAs(path, user, password string) (SourceState, error) {
+	server, share, ok := splitUNC(strings.TrimSpace(path))
+	if !ok {
+		return SourceState{}, errors.New("E_NOT_NETWORK_PATH")
+	}
+	if err := platform.SaveShareCredential(server, share, user, password); err != nil {
+		if errors.Is(err, platform.ErrLogonFailed) {
+			return SourceState{}, errors.New("E_LOGON_FAILED")
+		}
+		return SourceState{}, err
+	}
+	return a.AddSource(path)
+}
+
+// splitUNC splits \server\share\rest into server and share.
+func splitUNC(p string) (server, share string, ok bool) {
+	p = strings.ReplaceAll(p, "/", `\`)
+	if !strings.HasPrefix(p, `\`) {
+		return "", "", false
+	}
+	parts := strings.SplitN(p[2:], `\`, 3)
+	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", false
+	}
+	return parts[0], parts[1], true
+}

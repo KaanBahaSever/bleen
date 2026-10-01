@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=bleen
+Comment=Easy backups
+Exec=bleen
+Icon=bleen
+Terminal=false
+Categories=Utility;Archiving;

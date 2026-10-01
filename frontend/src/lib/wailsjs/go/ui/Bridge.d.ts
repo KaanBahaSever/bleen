@@ -7,6 +7,8 @@ export function Activity():Promise<Array<app.RunRecord>>;
 
 export function AddSource(arg1:string):Promise<app.SourceState>;
 
+export function AddSourceAs(arg1:string,arg2:string,arg3:string):Promise<app.SourceState>;
+
 export function BackupNow(arg1:Array<string>,arg2:boolean):Promise<string>;
 
 export function Browse(arg1:string,arg2:string,arg3:string):Promise<app.BrowseResult>;
