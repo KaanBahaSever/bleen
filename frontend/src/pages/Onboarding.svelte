@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check, Folder } from '@lucide/svelte';
+  import { Check, Folder, X } from '@lucide/svelte';
   import Mascot from '../lib/ui/Mascot.svelte';
   import AddSource from '../lib/AddSource.svelte';
   import DiskPicker from '../lib/DiskPicker.svelte';
@@ -55,6 +55,9 @@
                     <span class="ml-2 font-mono text-[12px] text-muted">{s.path}</span>
                   </span>
                   <Check size={16} class="text-ok" />
+                  <button class="btn btn-ghost h-7 w-7 p-0" aria-label={t('common.remove')} title={t('common.remove')} onclick={() => api.RemoveSource(s.id)}>
+                    <X size={15} />
+                  </button>
                 </li>
               {/each}
             </ul>

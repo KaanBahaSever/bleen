@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.0-beta.3
+
+Fixes from a hands-on test of every screen. / Her ekranın elle denenmesinden gelen düzeltmeler.
+
+- **Fixed:** Pause and Stop now take effect inside large files, not only between files
+- **Fixed:** a wrong restore or export destination is reported right away and the restore window stays open; a ZIP name without ".zip" gets it
+- **Fixed:** clicking an item in a location's menu no longer also opens its history
+- **Fixed:** "Check backups" says "Finished with problems" when it finds damage and offers to make a fresh full backup
+- **Changed:** removing a location or a disk asks first and says that backups stay on the disk
+- **Changed:** the backup summary shows how much data will be read instead of a guessed archive size
+- **Changed:** clearer statuses when no disk is chosen or the disk is locked; duplicate buttons removed ("Choose disk", "Unlock", "Restore latest state" when the latest day is already selected, "Open backup folder" when nothing was written)
+- **Changed:** onboarding can remove a location and says when one is already added; password problems show while typing
+- **Changed:** "Auto" language label translated; the automatic-backup text names only this computer's scheduler; the location menu button has an accessible name
+
 ## 0.3.0-beta.2
 
 Fixes from a second full review. Please update. / İkinci kapsamlı incelemeden gelen düzeltmeler; lütfen güncelleyin.

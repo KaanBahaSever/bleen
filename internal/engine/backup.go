@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -472,6 +473,22 @@ func store(w *archive.Writer, r result, rep *Report) error {
 	return nil
 }
 
+// gatedReader lets Pause and Cancel take effect inside a large file, not
+// only between files (several files are read at once).
+type gatedReader struct {
+	r   io.Reader
+	g   *Gate
+	ctx context.Context
+}
+
+func (g gatedReader) Read(p []byte) (int, error) {
+	g.g.Wait(g.ctx)
+	if err := g.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return g.r.Read(p)
+}
+
 // readOne reads, hashes and compresses one file. It retries files that are
 // locked by another program or that change while being read.
 func readOne(ctx context.Context, src *source.LocalFS, t task, opt BackupOptions) result {
@@ -497,7 +514,7 @@ func readOne(ctx context.Context, src *source.LocalFS, t task, opt BackupOptions
 			}
 			return fail(source.ErrCode(err), err)
 		}
-		c, err := archive.Compress(f, t.e.Path, before.Size, opt.TempDir)
+		c, err := archive.Compress(gatedReader{f, opt.Gate, ctx}, t.e.Path, before.Size, opt.TempDir)
 		f.Close()
 		if err != nil {
 			return fail(source.ErrCode(err), err)

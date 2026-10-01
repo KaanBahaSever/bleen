@@ -24,8 +24,17 @@
     }
   }
 
+  const same = (a: string, b: string) => {
+    const n = (x: string) => x.trim().replace(/[\\/]+$/, '').toLowerCase();
+    return n(a) === n(b);
+  };
+
   async function add(withCredentials = false) {
     error = '';
+    if ((store.state?.sources ?? []).some((s) => same(s.path, path))) {
+      error = t('add.exists');
+      return;
+    }
     busy = true;
     try {
       if (withCredentials) await api.AddSourceAs(path, user, pass);

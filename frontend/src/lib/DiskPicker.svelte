@@ -17,10 +17,20 @@
     drives = (await api.Drives()) ?? [];
   });
 
-  async function use(dir: string) {
+  // Shown while typing, not only after a disk was clicked.
+  const pwProblem = $derived(
+    !encrypt ? '' : pw.length > 0 && pw.length < 8 ? t('err.E_WEAK_PASSWORD') : pw2.length > 0 && pw !== pw2 ? t('enc.mismatch') : '',
+  );
+
+  function check(): boolean {
     error = '';
-    if (encrypt && pw.length < 8) return void (error = t('err.E_WEAK_PASSWORD'));
-    if (encrypt && pw !== pw2) return void (error = t('enc.mismatch'));
+    if (encrypt && pw.length < 8) return void (error = t('err.E_WEAK_PASSWORD')), false;
+    if (encrypt && pw !== pw2) return void (error = t('enc.mismatch')), false;
+    return true;
+  }
+
+  async function use(dir: string) {
+    if (!check()) return;
     busy = true;
     try {
       await api.UseVaultFolder(dir, encrypt ? pw : '');
@@ -33,6 +43,7 @@
   }
 
   async function other() {
+    if (!check()) return;
     const p = await api.ChooseFolder(t('onb.vault.other'), '');
     if (p) await use(p);
   }
@@ -51,6 +62,7 @@
           <input class="input" type="password" autocomplete="new-password" placeholder={t('enc.password')} aria-label={t('enc.password')} bind:value={pw} />
           <input class="input" type="password" autocomplete="new-password" placeholder={t('enc.repeat')} aria-label={t('enc.repeat')} bind:value={pw2} />
         </span>
+        {#if pwProblem}<span class="mt-2 block text-[12px] font-semibold text-bad">{pwProblem}</span>{/if}
         <span class="mt-2 block text-[12px] font-semibold text-warn">{t('enc.warn')}</span>
       {/if}
     </span>
@@ -83,7 +95,7 @@
       <FolderOpen size={16} />{t('onb.vault.other')}
     </button>
   </div>
-  {#if error}<p class="text-[13px] text-bad" role="alert">{error}</p>{/if}
+  {#if error && error !== pwProblem}<p class="text-[13px] text-bad" role="alert">{error}</p>{/if}
 </div>
 
 <style>

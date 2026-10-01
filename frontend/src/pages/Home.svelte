@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ConfirmSheet from '../lib/ui/ConfirmSheet.svelte';
   import { HardDrive, Plus, Ellipsis, Folder, Server, TriangleAlert, Lock } from '@lucide/svelte';
   import Mascot from '../lib/ui/Mascot.svelte';
   import Sparkline from '../lib/ui/Sparkline.svelte';
@@ -17,6 +18,7 @@
   let picking = $state(false);
   let unlocking = $state(false);
   let menu = $state('');
+  let removing = $state<app.SourceState | null>(null);
 
   const primary = $derived.by(() => {
     if (!sources.length) return { label: t('home.btn.addFirst'), action: () => (adding = true), disabled: false };
@@ -45,6 +47,8 @@
 
   function status(s: app.SourceState): { cls: string; text: string } {
     if (s.reachable === false) return { cls: 'pill-warn', text: t('src.unreachable') };
+    if (!vault) return { cls: 'pill-muted', text: t('src.noDisk') };
+    if (vault.locked) return { cls: 'pill-muted', text: t('src.locked') }; // backups can't be read until unlocked
     if (s.backups === 0) return { cls: 'pill-info', text: t('src.never') };
     if (s.lastIssues > 0) return { cls: 'pill-warn', text: t('src.issues', { n: s.lastIssues }) };
     const days = (Date.now() - new Date(s.lastBackup).getTime()) / 86400000;
@@ -88,15 +92,11 @@
         {#if vault.connected}
           <span class="num text-[13px] text-muted">{t('common.free', { size: fmtSize(lang(), vault.free) })}</span>
         {/if}
-        {#if vault.locked}
-          <button class="btn btn-secondary" onclick={() => (unlocking = true)}>{t('enc.unlock')}</button>
-        {/if}
         <button class="btn btn-ghost" onclick={() => (picking = true)}>{t('common.change')}</button>
       </div>
     {:else}
       <div class="card flex items-center gap-4 px-5 py-4">
         <p class="flex-1 text-muted">{t('home.noDisk')}</p>
-        <button class="btn btn-secondary" onclick={() => (picking = true)}>{t('home.chooseDisk')}</button>
       </div>
     {/if}
   </section>
@@ -134,21 +134,23 @@
               </div>
               <button
                 class="btn btn-ghost h-7 w-7 p-0"
-                aria-label="…"
+                aria-label={t('common.more')}
+                title={t('common.more')}
                 onclick={(e) => {
                   e.stopPropagation();
                   menu = menu === s.id ? '' : s.id;
                 }}><Ellipsis size={16} /></button
               >
               {#if menu === s.id}
-                <div class="menu card" role="menu">
+                <!-- svelte-ignore a11y_click_events_have_key_events, a11y_interactive_supports_focus -->
+                <div class="menu card" role="menu" tabindex="-1" onclick={(e) => e.stopPropagation()}>
                   <button role="menuitem" disabled={!vault?.connected || !!store.job} onclick={() => backupNow([s.id])}>
                     {t('home.backupOnly')}
                   </button>
                   <button role="menuitem" disabled={!vault?.connected || !!store.job || s.backups === 0} onclick={() => backupNow([s.id], true)}>
                     {t('home.freshFull')}
                   </button>
-                  <button role="menuitem" class="text-bad" onclick={() => api.RemoveSource(s.id)}>{t('common.remove')}</button>
+                  <button role="menuitem" class="text-bad" onclick={() => ((menu = ''), (removing = s))}>{t('common.remove')}</button>
                 </div>
               {/if}
             </div>
@@ -233,3 +235,13 @@
     opacity: 0.5;
   }
 </style>
+
+{#if removing}
+  <ConfirmSheet
+    title={t('src.remove.title', { name: removing.name })}
+    body={t('src.remove.body')}
+    confirm={t('common.remove')}
+    onconfirm={() => api.RemoveSource(removing!.id)}
+    onclose={() => (removing = null)}
+  />
+{/if}

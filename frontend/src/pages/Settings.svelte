@@ -6,6 +6,8 @@
   import DiskPicker from '../lib/DiskPicker.svelte';
   import { api, errText, lang, store, t, toast } from '../lib/store.svelte';
   import { fmtSize } from '../lib/i18n';
+  import ConfirmSheet from '../lib/ui/ConfirmSheet.svelte';
+  import type { app } from '../lib/wailsjs/go/models';
 
   const st = $derived(store.state!);
   let excludes = $state((store.state?.exclude ?? []).join('\n'));
@@ -21,6 +23,11 @@
     }
   }
   let picking = $state(false);
+  let removing = $state<app.SourceState | null>(null);
+  let forgetting = $state<app.KnownVault | null>(null);
+  const scheduler = $derived(
+    st.os === 'windows' ? (lang() === 'tr' ? 'Görev Zamanlayıcı' : 'Task Scheduler') : st.os === 'darwin' ? 'launchd' : 'systemd',
+  );
 
   async function saveExcludes() {
     await api.SetExcludes(excludes.split('\n'));
@@ -44,7 +51,7 @@
     <div class="flex items-center gap-3 px-5 py-3">
       <span class="flex-1">{t('set.language')}</span>
       <div class="seg" role="radiogroup" aria-label={t('set.language')}>
-        {#each [['system', 'Auto'], ['tr', 'Türkçe'], ['en', 'English']] as [v, label] (v)}
+        {#each [['system', t('common.auto')], ['tr', 'Türkçe'], ['en', 'English']] as [v, label] (v)}
           <button role="radio" aria-checked={st.language === v} class:on={st.language === v} onclick={() => api.SetLanguage(v)}>{label}</button>
         {/each}
       </div>
@@ -77,7 +84,7 @@
           <span class="block font-semibold">{s.name}</span>
           <span class="block truncate font-mono text-[12px] text-muted">{s.path}</span>
         </span>
-        <button class="btn btn-ghost" aria-label={t('common.remove')} onclick={() => api.RemoveSource(s.id)}><Trash2 size={16} /></button>
+        <button class="btn btn-ghost" aria-label={t('common.remove')} title={t('common.remove')} onclick={() => (removing = s)}><Trash2 size={16} /></button>
       </div>
     {/each}
   </section>
@@ -111,7 +118,7 @@
         {:else}
           <button class="btn btn-secondary" disabled={!d.connected || !!store.job} onclick={() => api.SwitchVault(d.id)}>{t('set.disk.use')}</button>
         {/if}
-        <button class="btn btn-ghost" aria-label={t('set.disk.forget')} title={t('set.disk.forget')} disabled={!!store.job} onclick={() => api.ForgetVault(d.id)}><Trash2 size={16} /></button>
+        <button class="btn btn-ghost" aria-label={t('set.disk.forget')} title={t('set.disk.forget')} disabled={!!store.job} onclick={() => (forgetting = d)}><Trash2 size={16} /></button>
       </div>
     {/each}
     <div class="flex items-center gap-3 px-5 py-3">
@@ -151,7 +158,7 @@
     <label class="flex items-start gap-3">
       <span class="flex-1">
         <span class="block">{t('set.auto')}</span>
-        <span class="block text-[12px] text-muted">{st.automation.supported ? t('set.auto.hint') : t('set.auto.unsupported')}</span>
+        <span class="block text-[12px] text-muted">{st.automation.supported ? t('set.auto.hint', { scheduler: scheduler }) : t('set.auto.unsupported')}</span>
       </span>
       <input type="checkbox" class="switch mt-1" disabled={!st.automation.supported} checked={st.automation.enabled}
         onchange={(e) => setAuto(e.currentTarget.checked, autoTime, e.currentTarget)} />
@@ -232,3 +239,23 @@
     transform: translateX(16px);
   }
 </style>
+
+{#if removing}
+  <ConfirmSheet
+    title={t('src.remove.title', { name: removing.name })}
+    body={t('src.remove.body')}
+    confirm={t('common.remove')}
+    onconfirm={() => api.RemoveSource(removing!.id)}
+    onclose={() => (removing = null)}
+  />
+{/if}
+
+{#if forgetting}
+  <ConfirmSheet
+    title={t('disk.forget.title', { name: forgetting.label || forgetting.path })}
+    body={t('disk.forget.body') + (forgetting.active ? t('disk.forget.active') : '')}
+    confirm={t('set.disk.forget')}
+    onconfirm={() => api.ForgetVault(forgetting!.id)}
+    onclose={() => (forgetting = null)}
+  />
+{/if}

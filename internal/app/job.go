@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -390,8 +391,13 @@ func (a *App) Restore(sourceID, backupID, dest string, paths []string) (string, 
 	})
 }
 
-// Export saves a backup (or only some paths of it) as one new ZIP file.
+// Export saves a backup (or only some paths of it) as one new ZIP file. A
+// name without .zip gets it, so the file opens as a ZIP everywhere.
 func (a *App) Export(sourceID, backupID, dest string, paths []string) (string, error) {
+	dest = strings.TrimSpace(dest)
+	if !strings.EqualFold(filepath.Ext(dest), ".zip") {
+		dest += ".zip"
+	}
 	return a.restoreJob("export", sourceID, dest, func(ctx context.Context, v *vault.Vault, src *catalog.Source, p engine.Progress) (*engine.RestoreReport, error) {
 		return engine.Export(ctx, v, src, engine.ExportOptions{Snapshot: backupID, Dest: dest, Paths: paths, Progress: p})
 	})
@@ -409,6 +415,11 @@ func (a *App) restoreJob(kind, sourceID, dest string, run restoreFunc) (string, 
 	}
 	if !destReachable(dest) {
 		return "", errors.New("E_DEST_UNREACHABLE")
+	}
+	// Refuse a wrong destination now, while the restore sheet is still open,
+	// instead of failing a job a moment later.
+	if code := destProblem(kind, dest, vaultPath); code != "" {
+		return "", errors.New(code)
 	}
 	j, err := a.newJob(kind, 1)
 	if err != nil {
@@ -456,6 +467,26 @@ func (a *App) restoreJob(kind, sourceID, dest string, run restoreFunc) (string, 
 		a.finish(j, PhaseDone, nil)
 	}()
 	return j.state.ID, nil
+}
+
+// destProblem checks a restore or export destination before the job starts.
+// The engine checks again; this only gives an immediate answer.
+func destProblem(kind, dest, vaultPath string) string {
+	if vaultPath != "" {
+		if rel, err := filepath.Rel(vaultPath, dest); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return engine.EDestInVault
+		}
+	}
+	if kind == "export" {
+		if _, err := os.Lstat(dest); err == nil {
+			return engine.EDestExists
+		}
+		return ""
+	}
+	if des, err := os.ReadDir(dest); err == nil && len(des) > 0 {
+		return engine.EDestNotEmpty
+	}
+	return ""
 }
 
 // destReachable reports whether dest's drive or network share is there.

@@ -173,3 +173,27 @@ func TestScheduledRunFindsDiskUnderNewLetter(t *testing.T) {
 		t.Fatalf("disk in use: %+v", app.cfg.Vault)
 	}
 }
+
+// TestDestProblem: a wrong restore or export destination is refused before
+// a job starts, so the restore sheet can stay open.
+func TestDestProblem(t *testing.T) {
+	d := t.TempDir()
+	vaultPath := filepath.Join(d, "bleen")
+	full := filepath.Join(d, "full")
+	os.MkdirAll(full, 0o755)
+	os.WriteFile(filepath.Join(full, "a.txt"), []byte("a"), 0o644)
+	os.WriteFile(filepath.Join(d, "x.zip"), []byte("zip"), 0o644)
+	cases := []struct{ kind, dest, want string }{
+		{"restore", filepath.Join(d, "new"), ""},
+		{"restore", full, "E_DEST_NOT_EMPTY"},
+		{"restore", filepath.Join(vaultPath, "r"), "E_DEST_IN_VAULT"},
+		{"export", filepath.Join(d, "y.zip"), ""},
+		{"export", filepath.Join(d, "x.zip"), "E_DEST_EXISTS"},
+		{"export", filepath.Join(vaultPath, "y.zip"), "E_DEST_IN_VAULT"},
+	}
+	for _, c := range cases {
+		if got := destProblem(c.kind, c.dest, vaultPath); got != c.want {
+			t.Errorf("%s %s: %q, want %q", c.kind, c.dest, got, c.want)
+		}
+	}
+}

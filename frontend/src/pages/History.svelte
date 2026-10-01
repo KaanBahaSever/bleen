@@ -103,7 +103,7 @@
     if (!restoring) return;
     const r = restoring;
     try {
-      if (r.mode === 'zip') await api.Export(r.sourceId, r.backupId, r.zip, r.paths);
+      if (r.mode === 'zip') await api.Export(r.sourceId, r.backupId, /\.zip$/i.test(r.zip.trim()) ? r.zip.trim() : r.zip.trim() + '.zip', r.paths);
       else await api.Restore(r.sourceId, r.backupId, r.folder, r.paths);
       restoring = null;
     } catch (e) {
@@ -115,7 +115,7 @@
 <div class="mx-auto flex h-full max-w-[960px] flex-col px-8 py-8">
   <div class="mb-5 flex items-center gap-3">
     <h1 class="flex-1 font-display text-[26px]">{t('hist.title')}</h1>
-    {#if backups.length}
+    {#if backups.length && backupId !== backups.at(-1)?.id}
       <button class="btn btn-secondary" disabled={!!store.job} onclick={() => startRestore([], backups.at(-1)!)}>
         <RotateCcw size={16} />{t('hist.latest')}
       </button>

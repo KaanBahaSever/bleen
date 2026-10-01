@@ -62,7 +62,7 @@
   );
 
   const title = $derived.by(() => {
-    if (job.phase === 'done') return (job.results ?? []).some((r) => r.result === 'failed') ? t('run.doneProblems') : t('run.done');
+    if (job.phase === 'done') return problems ? t('run.doneProblems') : t('run.done');
     if (job.phase === 'failed') return t('run.failed');
     if (job.phase === 'cancelled') return t('run.cancelled');
     if (job.phase === 'awaiting') return t('run.preflight');
@@ -71,6 +71,21 @@
     if (job.kind === 'verify') return t('run.verifyingAll');
     return t('run.backingUp', { name: job.sourceName || '…' });
   });
+
+  // A run "finished with problems": a location failed, or a check found damage.
+  const problems = $derived(
+    (job.results ?? []).some((r) => r.result === 'failed' || (r.kind === 'verify' && (r.issues?.length ?? 0) > 0)),
+  );
+  const wroteArchives = $derived((job.results ?? []).some((r) => (r.archives?.length ?? 0) > 0));
+
+  async function freshFull() {
+    try {
+      await api.DismissJob();
+      await api.BackupNow([], true);
+    } catch (e) {
+      toast(errText(e));
+    }
+  }
 
   const allIssues = $derived((job.results ?? []).flatMap((r) => (r.issues ?? []).map((i) => ({ ...i, source: r.source }))));
 
@@ -93,7 +108,7 @@
     } else {
       rows.push(row(t('run.total'), fmtNumber(lang(), pl.totalFiles)));
     }
-    rows.push(row(t('run.estimate'), '~' + fmtSize(lang(), pl.estStored)));
+    rows.push(row(t('run.estimate'), fmtSize(lang(), pl.bytesToRead)));
     if (pl.vaultFree) rows.push(row(t('run.diskFree'), fmtSize(lang(), pl.vaultFree)));
     if (pl.scanIssues) rows.push(row(t('run.unreadable'), fmtNumber(lang(), pl.scanIssues)));
     return rows;
@@ -196,6 +211,7 @@
                 <p class="check"><Check size={16} />{t('run.verifyOk', { n: fmtNumber(lang(), r.files) })} ({fmtSize(lang(), r.bytes)})</p>
               {:else}
                 <p class="flex items-center gap-2 font-semibold text-bad"><CircleAlert size={16} />{t('run.verifyBad', { n: r.issues?.length ?? 0 })}</p>
+                <p class="ml-6 text-[13px] text-muted">{t('run.verifyBad.hint')}</p>
               {/if}
             {/if}
           </li>
@@ -240,8 +256,10 @@
         <button class="btn btn-secondary" onclick={() => api.OpenFolder(job.dest!)}>{t('common.openFolder')}</button>
       {:else if job.kind === 'export' && job.dest && job.phase === 'done'}
         <button class="btn btn-secondary" onclick={() => api.OpenFolder(job.dest!)}>{t('common.showFile')}</button>
-      {:else if job.kind === 'backup' && store.state?.vault?.path}
+      {:else if job.kind === 'backup' && wroteArchives && store.state?.vault?.path}
         <button class="btn btn-secondary" onclick={() => api.OpenFolder(store.state!.vault!.path)}>{t('run.openBackup')}</button>
+      {:else if job.kind === 'verify' && problems}
+        <button class="btn btn-secondary" onclick={freshFull}>{t('run.freshFull')}</button>
       {/if}
       <button class="btn btn-primary" onclick={close}>{t('common.done')}</button>
     {/if}
