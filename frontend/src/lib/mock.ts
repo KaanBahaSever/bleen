@@ -17,8 +17,17 @@ if (params.has('still')) {
   document.head.appendChild(st);
 }
 const lang = new URLSearchParams(location.search).get('lang') ?? 'tr';
-const day = (n: number, h = 18, m = 0) => {
+// All fake times hang off one anchor: the latest 15:30 that is at least two
+// hours ago. "Today" entries stay before it, so nothing is ever in the
+// future and every file is older than the backup that contains it.
+const anchor = (() => {
   const d = new Date();
+  d.setHours(15, 30, 0, 0);
+  if (d.getTime() > Date.now() - 2 * 3_600_000) d.setDate(d.getDate() - 1);
+  return d;
+})();
+const day = (n: number, h = 18, m = 0) => {
+  const d = new Date(anchor);
   d.setDate(d.getDate() - n);
   d.setHours(h, m, 0, 0);
   return d.toISOString();
@@ -160,7 +169,7 @@ const Bridge: Record<string, (...a: any[]) => Promise<any>> = {
   DismissJob: async () => ((state.job = null), emitState()),
   ListBackups: async () => [
     { id: 'c1', name: '_proje', folder: '_proje', origin: '\\\\SERVER\\Root\\_proje', host: 'OFIS-PC', backups },
-    { id: 'c2', name: 'muhasebe', folder: 'muhasebe', origin: '\\\\SERVER\\Root\\muhasebe', host: 'OFIS-PC', backups: backups.slice(0, 3) },
+    { id: 'c2', name: 'muhasebe', folder: 'muhasebe', origin: '\\\\SERVER\\Root\\muhasebe', host: 'OFIS-PC', backups: [backups[0], backups[1], backups[3]] },
   ],
   Browse: async (_s, _b, dir) => ({
     entries: tree[dir] ?? [

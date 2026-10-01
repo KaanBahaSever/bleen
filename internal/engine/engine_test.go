@@ -1,10 +1,12 @@
 package engine
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"math/rand/v2"
 	"os"
@@ -312,8 +314,8 @@ func TestIncrementalStoresOnlyChanges(t *testing.T) {
 	if p.Kind != "incremental" || p.New != 2 || p.Modified != 1 || p.Deleted != 2 {
 		t.Fatalf("plan: %+v", p)
 	}
-	if rep.FilesStored != 2 || rep.FilesDeduped != 1 {
-		t.Fatalf("stored=%d deduped=%d, want 2 and 1 (the move is a reference)", rep.FilesStored, rep.FilesDeduped)
+	if rep.FilesStored != 3 || rep.FilesDeduped != 0 {
+		t.Fatalf("stored=%d deduped=%d, want 3 and 0 (a moved file is stored again)", rep.FilesStored, rep.FilesDeduped)
 	}
 
 	rep, err = Backup(context.Background(), v, src, testOpts(2))
@@ -592,4 +594,65 @@ func TestEncryptedVault(t *testing.T) {
 	}
 	defer v.Close()
 	restoreAll(t, v, truth)
+}
+
+// TestManualRestoreWithoutBleen follows the README: extract the FULL
+// archive, then every INCREMENTAL in order, deleting what DELETED.txt
+// lists. The result must equal the folder, moves and copies included.
+func TestManualRestoreWithoutBleen(t *testing.T) {
+	for _, seed := range []uint64{4, 5, 6} {
+		v := newVault(t)
+		s := &sim{t: t, rnd: rand.New(rand.NewPCG(seed, 1)), dir: filepath.Join(t.TempDir(), "src")}
+		for range 12 {
+			s.write(s.randomPath(), s.content())
+		}
+		src := source.NewLocal(s.dir, nil)
+		for day := 0; day < 15; day++ {
+			s.day = day
+			if day > 0 {
+				s.mutate()
+			}
+			if _, err := Backup(context.Background(), v, src, testOpts(day)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		zips, _ := filepath.Glob(filepath.Join(v.Root, "src", "*.zip"))
+		sort.Strings(zips) // names start with the date
+		dest := t.TempDir()
+		for _, z := range zips {
+			zr, err := zip.OpenReader(z)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, f := range zr.File {
+				rel, ok := strings.CutPrefix(f.Name, "files/")
+				switch {
+				case !ok:
+					if f.Name == "DELETED.txt" {
+						rc, _ := f.Open()
+						b, _ := io.ReadAll(rc)
+						rc.Close()
+						for _, line := range strings.Split(strings.TrimSpace(string(b)), "\r\n") {
+							if line != "" {
+								os.RemoveAll(filepath.Join(dest, filepath.FromSlash(line)))
+							}
+						}
+					}
+				case strings.HasSuffix(rel, "/"):
+					os.MkdirAll(filepath.Join(dest, filepath.FromSlash(rel)), 0o755)
+				default:
+					p := filepath.Join(dest, filepath.FromSlash(rel))
+					os.MkdirAll(filepath.Dir(p), 0o755)
+					rc, _ := f.Open()
+					b, _ := io.ReadAll(rc)
+					rc.Close()
+					os.WriteFile(p, b, 0o644)
+				}
+			}
+			zr.Close()
+		}
+		if d := diffTrees(readTree(t, s.dir), readTree(t, dest)); d != "" {
+			t.Fatalf("seed %d: hand-extracted archives differ from the folder:\n%s", seed, d)
+		}
+	}
 }

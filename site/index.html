@@ -178,7 +178,7 @@
       <h2 data-t="q.title">Sık sorulan sorular</h2>
       <p class="lead"></p>
       <details><summary data-t="q1.q">bleen arka planda çalışır mı?</summary><p data-t="q1.a">Hayır. Pencere kapandığında bleen de kapanır. Otomatik yedeklemeyi açarsan Windows, bleen'i günde bir kez çalıştırır.</p></details>
-      <details><summary data-t="q2.q">Yedeklerimi bleen olmadan açabilir miyim?</summary><p data-t="q2.a">Evet. Önce FULL dosyasını, sonra INCREMENTAL dosyalarını tarih sırasıyla çıkar. Adımlar yedek diskindeki README.txt dosyasında yazar.</p></details>
+      <details><summary data-t="q2.q">Yedeklerimi bleen olmadan açabilir miyim?</summary><p data-t="q2.a">Evet. Önce FULL dosyasını, sonra INCREMENTAL dosyalarını tarih sırasıyla aynı klasöre çıkar. Ardından her arşivdeki DELETED.txt dosyasında listelenen dosyaları sil. Bu adımlar yedek diskindeki README.txt dosyasında da yazar.</p></details>
       <details><summary data-t="q3.q">Hangi sistemlerde çalışır?</summary><p data-t="q3.a">Windows 10 ve 11. Windows 7 ve 8.1 için ayrı bir sürüm vardır; bu sürüm WebView2 çalışma zamanı gerektirir. Komut satırı aracı bleenctl Windows, macOS ve Linux'ta çalışır.</p></details>
       <details><summary data-t="q4.q">Parolamı unutursam ne olur?</summary><p data-t="q4.a">Şifreli yedekler açılamaz. Parolayı kurtarmanın bir yolu yoktur; güvenli bir yerde sakla.</p></details>
       <details><summary data-t="q5.q">Ücretli mi?</summary><p data-t="q5.a">Hayır. bleen ücretsiz ve açık kaynaktır (Apache-2.0). İnternete veri göndermez.</p></details>
@@ -212,7 +212,7 @@ const T = {
     's3.h': 'Restore', 's3.p': 'Pick a date. The folder is restored as it was on that date.',
     'q.title': 'FAQ',
     'q1.q': 'Does bleen run in the background?', 'q1.a': 'No. bleen quits when you close its window. If you turn on automatic backups, Windows starts bleen once a day.',
-    'q2.q': 'Can I open my backups without bleen?', 'q2.a': 'Yes. Extract the FULL file first, then the INCREMENTAL files in date order. The README.txt file on the backup drive lists the steps.',
+    'q2.q': 'Can I open my backups without bleen?', 'q2.a': 'Yes. Extract the FULL file first, then the INCREMENTAL files in date order into the same folder. Then delete the files listed in each archive's DELETED.txt. The README.txt file on the backup drive lists these steps too.',
     'q3.q': 'Which systems are supported?', 'q3.a': 'Windows 10 and 11. A separate edition supports Windows 7 and 8.1; it requires the WebView2 runtime. The bleenctl command-line tool runs on Windows, macOS and Linux.',
     'q4.q': 'What if I forget my password?', 'q4.a': 'Encrypted backups cannot be opened. There is no way to recover the password, so keep it somewhere safe.',
     'q5.q': 'Is it free?', 'q5.a': 'Yes. bleen is free and open source (Apache-2.0). It sends no data over the internet.',

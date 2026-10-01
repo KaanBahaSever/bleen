@@ -277,13 +277,7 @@ func Backup(ctx context.Context, v *vault.Vault, src *source.LocalFS, opt Backup
 
 	rep := &Report{Plan: plan, SnapshotID: snap.ID, Issues: issues}
 	sort.Slice(tasks, func(i, j int) bool { return tasks[i].e.Path < tasks[j].e.Path })
-	// Only incrementals reference earlier bytes, and only within their own
-	// generation, so a full backup is always self-contained.
-	var dd *dedupScope
-	if latest != nil && snap.Kind == "incremental" {
-		dd = &dedupScope{sourceID: row.ID, generationID: latest.GenerationID}
-	}
-	if err := runPipeline(ctx, v, src, w, tasks, opt, rep, plan.BytesToRead, dd); err != nil {
+	if err := runPipeline(ctx, v, src, w, tasks, opt, rep, plan.BytesToRead); err != nil {
 		return nil, err
 	}
 
@@ -338,7 +332,7 @@ func Backup(ctx context.Context, v *vault.Vault, src *source.LocalFS, opt Backup
 }
 
 func runPipeline(ctx context.Context, v *vault.Vault, src *source.LocalFS, w *archive.Writer,
-	tasks []task, opt BackupOptions, rep *Report, bytesTotal int64, dd *dedupScope) error {
+	tasks []task, opt BackupOptions, rep *Report, bytesTotal int64) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -396,7 +390,7 @@ func runPipeline(ctx context.Context, v *vault.Vault, src *source.LocalFS, w *ar
 			prog.Issue(*r.issue)
 			continue
 		}
-		if err := store(v, w, r, rep, dd); err != nil {
+		if err := store(w, r, rep); err != nil {
 			firstErr = err
 			cancel()
 		}
@@ -410,11 +404,12 @@ func runPipeline(ctx context.Context, v *vault.Vault, src *source.LocalFS, w *ar
 	return nil
 }
 
-// store appends one read file to the archive, or records a reference when
-// the same bytes are already in the vault (unchanged content, moves, copies).
-type dedupScope struct{ sourceID, generationID int64 }
-
-func store(v *vault.Vault, w *archive.Writer, r result, rep *Report, dd *dedupScope) error {
+// store appends one read file to the archive. The only exception is a file
+// whose date changed but whose content did not: it is recorded as a
+// reference to the bytes already stored for the same path. Moved and copied
+// files are always stored again, so that extracting the ZIPs by hand (FULL,
+// then each INCREMENTAL in order) rebuilds the folder without bleen.
+func store(w *archive.Writer, r result, rep *Report) error {
 	defer r.c.Spool.Close()
 	sha := hex.EncodeToString(r.c.SHA256[:])
 	e := archive.Entry{Op: r.t.op, Path: r.t.e.Path, Kind: archive.KindFile, Size: r.size, MTime: r.mtime.UTC(), SHA256: sha}
@@ -422,14 +417,6 @@ func store(v *vault.Vault, w *archive.Writer, r result, rep *Report, dd *dedupSc
 
 	if p := r.t.prev; p != nil && p.SHA256 == sha && p.Archive != "" {
 		e.Ref = &archive.Ref{Archive: p.Archive, Zip: p.EntryName}
-	} else if dd != nil && r.size > 0 {
-		arch, ent, ok, err := v.Catalog.FindContent(dd.sourceID, dd.generationID, r.size, sha)
-		if err != nil {
-			return err
-		}
-		if ok {
-			e.Ref = &archive.Ref{Archive: arch, Zip: ent}
-		}
 	}
 	if e.Ref != nil {
 		if err := w.AddMeta(e); err != nil {

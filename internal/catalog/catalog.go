@@ -382,19 +382,6 @@ func (c *DB) StateAt(sourceID, generationID int64, seq int) ([]Version, error) {
 	return scanVersions(rows)
 }
 
-// FindContent returns where bytes with this size and hash are already stored
-// within one generation of a source.
-func (c *DB) FindContent(sourceID, generationID, size int64, sha string) (archiveRel, entry string, ok bool, err error) {
-	err = c.db.QueryRow(`SELECT src.folder || '/' || a.filename, v.entry_name
-		FROM file_versions v JOIN archives a ON a.id = v.archive_id JOIN sources src ON src.id = a.source_id
-		WHERE v.size = ? AND v.sha256 = ? AND v.kind = 'file' AND v.source_id = ? AND v.generation_id = ?
-		ORDER BY v.id DESC LIMIT 1`, size, sha, sourceID, generationID).Scan(&archiveRel, &entry)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", "", false, nil
-	}
-	return archiveRel, entry, err == nil, err
-}
-
 // Archives lists every archive part in the vault.
 func (c *DB) Archives() ([]ArchiveInfo, error) {
 	rows, err := c.db.Query(`SELECT src.folder || '/' || a.filename, a.size, a.sha256 FROM archives a

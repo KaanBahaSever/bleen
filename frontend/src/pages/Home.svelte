@@ -25,7 +25,9 @@
       return { label: t('home.btn.plugIn', { label: vault.label || vault.path }), action: () => {}, disabled: true };
     if (vault.locked)
       return { label: t('home.btn.unlock', { label: vault.label || vault.path }), action: () => (unlocking = true), disabled: false };
-    const needsFirst = sources.some((s) => s.backups === 0);
+    // A new location still gets its full backup; the label only says
+    // "first backup" while nothing has been backed up at all.
+    const needsFirst = sources.every((s) => s.backups === 0);
     return {
       label: needsFirst ? t('home.btn.first') : t('home.btn.changes'),
       action: () => backupNow(),

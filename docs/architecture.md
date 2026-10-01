@@ -183,13 +183,13 @@ bleen's frontend is mostly **live state**: progress at 10 Hz, per-card status, a
 
 ### 2.5 Why SQLite (not BoltDB)
 
-The catalog needs **relational queries**: "state of this folder at snapshot 12", history aggregates, per-snapshot statistics and hash lookups for move detection. SQLite gives us indexes, transactions, and a file that users and debuggers can open with `sqlite3`. BoltDB is a key-value store, so we would end up rebuilding secondary indexes by hand. The draft already chose SQLite.
+The catalog needs **relational queries**: "state of this folder at snapshot 12", history aggregates, per-snapshot statistics and fast lookups by path. SQLite gives us indexes, transactions, and a file that users and debuggers can open with `sqlite3`. BoltDB is a key-value store, so we would end up rebuilding secondary indexes by hand. The draft already chose SQLite.
 
 ### 2.6 Why ZIP (not a chunked repository like restic or borg)  [ADR-0004]
 
 The draft asks for ZIP explicitly (FR-07), and tenet 2 requires backups to be openable without bleen. The trade-off is that there is **no deduplication inside files**. We reduce the cost in three ways:
 
-- **File-level deduplication.** A moved, renamed or copied file whose content already exists is stored as a reference, not as bytes (§3.3.2).
+- **Unchanged content is not copied again.** A file whose date changed but whose content did not is recorded as a reference to its earlier bytes (§3.3.2). Moved and copied files are stored again on purpose, so hand extraction always works.
 - **Smart compression.** Already-compressed types (JPG, MP4, ZIP, DOCX/XLSX, PDF…) are *stored* and not re-deflated, which saves CPU for no loss of space.
 - **Generations** (§3.3.9) keep incremental chains short.
 
@@ -321,10 +321,9 @@ The diff is a SQL join between the scratch scan table and the source's **current
 | **modified** | Size or mtime differs **and** the SHA-256 differs | Bytes |
 | **touched** | Size or mtime differs but the SHA-256 is **equal** | Metadata only (new mtime) |
 | **deleted** | In the current state, missing from the scan | A deletion record (FR-05) |
-| **moved / copied** | New or changed path whose `(size, sha256)` matches content already stored **in the same generation** | A reference to the existing entry; no bytes. Full backups never reference other archives, so each generation is self-contained and can be pruned safely |
+| **moved / copied** | New path (a move is recorded as *added* + *deleted*) | Bytes, stored again. Referencing older archives would save space, but then extracting the ZIPs by hand would miss the file, which breaks tenet 2 |
 
 - **SHA-256 is part of detection (FR-06), but without re-reading everything every day.** Unchanged files take the size+mtime fast path, as git and restic do. Candidates for change are hashed while they are read for archiving, so they are read **once** (§3.3.4). A **"Deep check"** action, available on demand, re-hashes every file for users who want certainty.
-- **Move detection is cheap.** We only pre-hash *new* files whose size matches content already in the vault.
 - **Local hash cache.** `state.db` remembers `(path, size, mtime) → sha256` per source, so the fast path works even the first time a vault is opened on this machine.
 
 #### 3.3.3 Plan and safety guards
@@ -883,10 +882,9 @@ enabled = false
     { "op": "added", "path": "klasor/resim.jpg", "kind": "file", "size": 5269988,
       "mtime": "2026-09-26T11:40:03Z", "sha256": "41aa…", "zip": "files/klasor/resim.jpg" },
     { "op": "added", "path": "arsiv", "kind": "dir", "mtime": "2026-09-26T10:00:00Z" },
-    { "op": "added", "path": "arsiv/teklif.docx", "kind": "file", "size": 30112, "sha256": "77e0…",
-      "mtime": "2026-09-20T08:00:00Z",
+    { "op": "modified", "path": "teklif.docx", "kind": "file", "size": 30112, "sha256": "77e0…",
+      "mtime": "2026-09-26T08:00:00Z",
       "ref": { "archive": "_proje/2026-09-25_1830_FULL.zip", "zip": "files/teklif.docx" } },
-    { "op": "deleted", "path": "teklif.docx", "kind": "file" },
     { "op": "deleted", "path": "eski_rapor.xlsx", "kind": "file" }
   ],
   "issues": [
@@ -895,7 +893,7 @@ enabled = false
 }
 ```
 
-- An entry with `zip` has its bytes in this part. An entry with `ref` points at bytes already stored in the same generation: a move (as above: added + deleted), a copy, or a file whose date changed but whose content did not.
+- An entry with `zip` has its bytes in this part. An entry with `ref` is a file whose date changed but whose content did not; it points at the bytes already stored **for the same path**, so extracting the archives in order still rebuilds the folder by hand. Moves and copies are always stored again.
 - Parts carry `index` and `last`; a snapshot is complete when the part marked `last` has `index` equal to the number of parts found.
 
 **Format policy.** The archive and vault formats are versioned separately from the app. **Every future bleen release must read every earlier format.** Backups outlive app versions. The normative spec lives in `docs/format/archive-v1.md`, and changes go through an RFC (§12).
