@@ -62,7 +62,12 @@ func TestHandRestoreKindAndCaseChanges(t *testing.T) {
 func TestLongFileNames(t *testing.T) {
 	v := newVault(t)
 	s := &sim{t: t, rnd: rand.New(rand.NewPCG(32, 32)), dir: filepath.Join(t.TempDir(), "src")}
-	long := strings.Repeat("ç", 100) + strings.Repeat("a", 151) + ".pdf" // 255 characters
+	// The longest name the system allows: 255 characters on Windows (NTFS),
+	// 255 bytes on Linux and macOS.
+	long := strings.Repeat("ç", 100) + strings.Repeat("a", 151) + ".pdf"
+	if runtime.GOOS != "windows" {
+		long = strings.Repeat("ç", 50) + strings.Repeat("a", 151) + ".pdf"
+	}
 	s.write(long, []byte("a long name"))
 	s.write("k/"+long, []byte("a long name in a folder"))
 	if _, err := Backup(context.Background(), v, source.NewLocal(s.dir, nil), testOpts(0)); err != nil {

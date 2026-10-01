@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/kaanbahasever/bleen/internal/archive"
 	"github.com/kaanbahasever/bleen/internal/catalog"
 	"github.com/kaanbahasever/bleen/internal/vault"
 )
@@ -93,16 +94,17 @@ func wouldLoseSkipped(v *vault.Vault, src *catalog.Source, drop, kept []catalog.
 	if len(skipped) == 0 {
 		return "", nil
 	}
-	under := func(state map[string]catalog.Version, p string) bool {
-		if _, ok := state[p]; ok {
-			return true
-		}
-		for q := range state {
-			if strings.HasPrefix(q, p+"/") {
-				return true
+	// The files a dropped generation holds at or under a skipped path. A
+	// skipped folder still appears in the new backup, but its files don't,
+	// so this goes file by file.
+	filesUnder := func(state map[string]catalog.Version, p string) []string {
+		var out []string
+		for q, ver := range state {
+			if ver.Kind != archive.KindDir && (q == p || strings.HasPrefix(q, p+"/")) {
+				out = append(out, q)
 			}
 		}
-		return false
+		return out
 	}
 	stateOf := func(gens []catalog.Generation) ([]map[string]catalog.Version, error) {
 		var out []map[string]catalog.Version
@@ -123,16 +125,16 @@ func wouldLoseSkipped(v *vault.Vault, src *catalog.Source, drop, kept []catalog.
 	if err != nil {
 		return "", err
 	}
-next:
 	for _, p := range skipped {
-		for _, st := range keptStates {
-			if under(st, p) {
-				continue next // a kept backup still has it
-			}
-		}
 		for _, st := range dropStates {
-			if under(st, p) {
-				return p, nil
+		files:
+			for _, f := range filesUnder(st, p) {
+				for _, kept := range keptStates {
+					if _, ok := kept[f]; ok {
+						continue files // a kept backup still has it
+					}
+				}
+				return f, nil
 			}
 		}
 	}

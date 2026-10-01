@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -321,7 +322,7 @@ func CopyEntry(zw *zip.Writer, f *zip.File, name string, mtime time.Time) error 
 // field only into the central directory, so it is added for the local
 // header and taken off again before Go builds the central directory.
 func createRaw(zw *zip.Writer, fh *zip.FileHeader) (io.Writer, error) {
-	if fh.CompressedSize64 < 0xffffffff && fh.UncompressedSize64 < 0xffffffff {
+	if fh.CompressedSize64 < 0xffffffff && fh.UncompressedSize64 < 0xffffffff || goWritesLocalZip64() {
 		return zw.CreateRaw(fh)
 	}
 	base := fh.Extra
@@ -335,6 +336,39 @@ func createRaw(zw *zip.Writer, fh *zip.FileHeader) (io.Writer, error) {
 	fh.Extra = base
 	return w, err
 }
+
+// goWritesLocalZip64 reports whether this Go version's CreateRaw already
+// puts the ZIP64 field into the local header (newer versions do).
+var goWritesLocalZip64 = sync.OnceValue(func() bool {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	fh := &zip.FileHeader{Name: "x", Method: zip.Store, CompressedSize64: 1, UncompressedSize64: 1 << 32}
+	w, err := zw.CreateRaw(fh)
+	if err != nil {
+		return false
+	}
+	w.Write([]byte{0}) // some versions write the header only now
+	zw.Close()
+	b := buf.Bytes()
+	if len(b) < 30 {
+		return false
+	}
+	n, e := int(binary.LittleEndian.Uint16(b[26:])), int(binary.LittleEndian.Uint16(b[28:]))
+	if len(b) < 30+n+e {
+		return false
+	}
+	for extra := b[30+n : 30+n+e]; len(extra) >= 4; {
+		if binary.LittleEndian.Uint16(extra) == 0x0001 {
+			return true
+		}
+		size := int(binary.LittleEndian.Uint16(extra[2:]))
+		if 4+size > len(extra) {
+			break
+		}
+		extra = extra[4+size:]
+	}
+	return false
+})
 
 // prepareRawHeader does for CreateRaw what zip.Writer.CreateHeader does
 // implicitly: UTF-8 flag, version fields and the extended-timestamp field.
