@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bleen · Kolay yedekleme</title>
+<meta name="description" content="bleen, klasörlerini harici bir diske yedekler ve istediğin günün kopyasını geri yükler. 30 gün ücretsiz dene.">
+<meta property="og:title" content="bleen">
+<meta property="og:description" content="Backs up your folders to an external drive. Restores them as they were on any day.">
+<meta property="og:image" content="img/home-en.png">
+<link rel="icon" href="bleen-mascot.svg" type="image/svg+xml">
+<style>
+  @font-face { font-family: "Nunito"; font-weight: 800; font-display: swap; src: url(fonts/nunito-latin-800-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+  @font-face { font-family: "Nunito"; font-weight: 800; font-display: swap; src: url(fonts/nunito-latin-ext-800-normal.woff2) format("woff2"); unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+  @font-face { font-family: "Inter"; font-weight: 100 900; font-display: swap; src: url(fonts/inter-latin-wght-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+  @font-face { font-family: "Inter"; font-weight: 100 900; font-display: swap; src: url(fonts/inter-latin-ext-wght-normal.woff2) format("woff2"); unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+  :root {
+    --before: #7fb0f4; --after: #6fd3a5;
+    --bg: #fbfaf7; --surface: #ffffff; --surface-2: #f3f1ec; --border: #e7e3dc;
+    --text: #1f2328; --muted: #646a73; --accent: #1e7f7b; --accent-fg: #fff; --accent-soft: #e1f4f2;
+    --shadow: 0 24px 60px rgb(16 24 40 / .12), 0 2px 6px rgb(16 24 40 / .05);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121417; --surface: #1a1d21; --surface-2: #22262b; --border: #2e333a;
+      --text: #eceef0; --muted: #9ba1a9; --accent: #5fd0c6; --accent-fg: #0b1f1e; --accent-soft: #153533;
+      --shadow: 0 24px 60px rgb(0 0 0 / .45);
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.6 "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
+  h1, h2, h3, .brand { font-family: "Nunito", "Varela Round", ui-rounded, system-ui, sans-serif; font-weight: 800; letter-spacing: -.01em; }
+
+  header { display: flex; align-items: center; gap: 12px; padding: 20px 0; }
+  .brand { display: flex; align-items: center; gap: 8px; font-size: 24px; color: var(--text); text-decoration: none; }
+  header nav { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  header nav a { color: var(--muted); text-decoration: none; font-weight: 600; font-size: 14px; padding: 6px 10px; border-radius: 8px; }
+  header nav a:hover { background: var(--surface-2); color: var(--text); }
+  .lang { font: 600 13px system-ui; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+
+  .hero { text-align: center; padding: 48px 0 24px; }
+  .hero .mascot { width: 132px; height: 132px; animation: breathe 4s ease-in-out infinite; }
+  .hero h1 { font-size: clamp(34px, 6vw, 56px); line-height: 1.08; margin: 18px auto 14px; max-width: 760px; }
+  .hero h1 .b { background: linear-gradient(90deg, var(--before), var(--after)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero p { color: var(--muted); font-size: 19px; max-width: 620px; margin: 0 auto; }
+  .cta { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin: 28px 0 8px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; height: 48px; padding: 0 22px; border-radius: 14px; font-weight: 700; text-decoration: none; border: 1px solid transparent; transition: transform .12s, filter .12s; }
+  .btn:active { transform: scale(.98); }
+  .btn-primary { background: var(--accent); color: var(--accent-fg); }
+  .btn-primary:hover { filter: brightness(1.07); }
+  .btn-secondary { background: var(--surface); color: var(--text); border-color: var(--border); }
+  .small, .hero p.small { color: var(--muted); font-size: 13px; }
+  .small a { color: var(--muted); }
+  .beta { display: inline-block; font: 700 12px system-ui; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 3px 10px; margin-bottom: 4px; }
+
+  .shot { margin: 40px auto 0; max-width: 960px; border-radius: 16px; overflow: hidden; box-shadow: var(--shadow); border: 1px solid var(--border); background: var(--surface); }
+  .shot .bar { display: flex; gap: 6px; padding: 10px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .shot .bar i { width: 10px; height: 10px; border-radius: 99px; background: var(--border); }
+  .shot img { display: block; width: 100%; height: auto; }
+
+  section { padding: 72px 0 0; }
+  section > h2 { font-size: 32px; text-align: center; margin: 0 0 8px; }
+  section > .lead { text-align: center; color: var(--muted); margin: 0 auto 32px; max-width: 580px; }
+
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 22px; }
+  .card h3 { margin: 12px 0 4px; font-size: 18px; }
+  .card p { margin: 0; color: var(--muted); font-size: 15px; }
+  .ico { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+  .ico svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; counter-reset: s; }
+  .step { position: relative; padding: 22px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; }
+  .step::before { counter-increment: s; content: counter(s); display: grid; place-items: center; width: 30px; height: 30px; border-radius: 99px; font: 800 15px "Nunito", system-ui; background: linear-gradient(90deg, var(--before), var(--after)); color: #102a24; }
+  .step h3 { margin: 12px 0 4px; font-size: 18px; }
+  .step p { margin: 0; color: var(--muted); font-size: 15px; }
+  .timeline { display: flex; align-items: center; gap: 10px; margin-top: 14px; font: 600 12px system-ui; color: var(--muted); flex-wrap: wrap; }
+  .dot { width: 12px; height: 12px; border-radius: 99px; background: var(--before); display: inline-block; vertical-align: middle; margin-right: 4px; }
+  .dot.full { background: linear-gradient(90deg, var(--before) 50%, var(--after) 50%); width: 14px; height: 14px; }
+
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .pair .shot { margin: 0; }
+
+  details { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 18px; margin: 0 auto 10px; max-width: 760px; }
+  summary { font-weight: 700; cursor: pointer; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: "+"; float: right; color: var(--muted); }
+  details[open] summary::after { content: "–"; }
+  details p { color: var(--muted); margin: 8px 0 2px; }
+  code { font: 13px ui-monospace, "JetBrains Mono", monospace; background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
+
+  footer { padding: 72px 0 40px; text-align: center; color: var(--muted); font-size: 14px; }
+  footer .mascot { width: 40px; height: 40px; }
+
+  @keyframes breathe { 50% { transform: scale(1.03) rotate(-1deg); } }
+  @media (prefers-reduced-motion: reduce) { .hero .mascot { animation: none; } }
+  @media (max-width: 760px) {
+    .grid, .steps, .pair { grid-template-columns: 1fr; }
+    header nav a { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="brand" href="#"><img src="bleen-mascot.svg" width="34" height="34" alt="">bleen</a>
+    <nav>
+      <a href="#features" data-t="nav.features">Özellikler</a>
+      <a href="#how" data-t="nav.how">Nasıl çalışır</a>
+      <a href="#faq" data-t="nav.faq">SSS</a>
+      <button class="lang" id="lang" aria-label="Language">EN</button>
+    </nav>
+  </header>
+
+  <main>
+    <div class="hero">
+      <img class="mascot" src="bleen-mascot.svg" alt="">
+      <h1 data-t="hero.title" data-html>Kolay <span class="b">yedekleme</span>.</h1>
+      <p data-t="hero.sub">Klasörlerini harici bir diske yedekler. İstediğin günün kopyasını geri yükler.</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/kaanbahasever/bleen/releases/download/v0.3.0-beta.4/bleen-windows-amd64.exe">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14"/></svg>
+          <span data-t="cta.download">Windows için indir</span>
+        </a>
+      </div>
+      <div><span class="beta">beta · v0.3.0-beta.4</span></div>
+      <p class="small" data-t="cta.more" data-html>Windows 10/11 · <a href="https://github.com/kaanbahasever/bleen/releases/download/v0.3.0-beta.4/bleen-windows7-8-amd64.exe">Windows 7/8.1</a> · <a href="https://github.com/kaanbahasever/bleen/releases/download/v0.3.0-beta.4/bleen-macos-universal.zip">macOS</a> · <a href="https://github.com/kaanbahasever/bleen/releases/download/v0.3.0-beta.4/bleen-linux-amd64.tar.gz">Linux</a> · <a href="https://github.com/kaanbahasever/bleen/releases">Tüm sürümler</a></p>
+
+      <div class="shot"><div class="bar"><i></i><i></i><i></i></div><img data-img="home" src="img/home-tr.png" alt="bleen ana ekranı" width="1620" height="1080"></div>
+    </div>
+
+    <section id="features">
+      <h2 data-t="f.title">Özellikler</h2>
+      <p class="lead" data-t="f.lead">Kurulum gerektirmez, hesap istemez.</p>
+      <div class="grid">
+        <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 3-6.2M4 4v4h4"/><path d="M12 8v4l3 2"/></svg></div>
+          <h3 data-t="f1.h">Artımlı yedekleme</h3><p data-t="f1.p">İlk yedek tüm dosyaları kopyalar. Sonraki yedekler yalnızca yeni ve değişen dosyaları alır.</p></div>
+        <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><path d="M3 7h18v13H3zM3 7l2-3h14l2 3M10 11h4"/></svg></div>
+          <h3 data-t="f2.h">Standart ZIP</h3><p data-t="f2.p">Yedekler normal ZIP dosyasıdır. bleen olmadan da açılabilir.</p></div>
+        <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01"/></svg></div>
+          <h3 data-t="f3.h">Ağ klasörleri</h3><p data-t="f3.p" data-html><code>\\SUNUCU\Paylaşım</code> gibi ağ yollarını doğrudan ekleyebilirsin.</p></div>
+        <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg></div>
+          <h3 data-t="f4.h">Doğrulama</h3><p data-t="f4.p">Her dosya SHA-256 ile kontrol edilir. Doğrulanmayan yedek kaydedilmez.</p></div>
+        <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div>
+          <h3 data-t="f5.h">Şifreleme</h3><p data-t="f5.p">İsteğe bağlı parola ile yedekleri ve dosya adlarını şifreler.</p></div>
+        <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/></svg></div>
+          <h3 data-t="f6.h">Arka planda çalışmaz</h3><p data-t="f6.p">bleen yalnızca açıkken çalışır. Otomatik yedekleme isteğe bağlıdır.</p></div>
+      </div>
+    </section>
+
+    <section id="how">
+      <h2 data-t="h.title">Nasıl çalışır?</h2>
+      <p class="lead" data-t="h.lead">Her yedekleme tek bir ZIP dosyası oluşturur. Değişen dosyaların yalnızca son hali saklanır.</p>
+      <div class="steps">
+        <div class="step"><h3 data-t="s1.h">Klasörü ve diski seç</h3><p data-t="s1.p">Yedeklenecek klasörü ve yedeklerin kaydedileceği diski seç.</p></div>
+        <div class="step"><h3 data-t="s2.h">Yedekle</h3><p data-t="s2.p">bleen değişiklikleri listeler. Onaylarsın; dosyalar kopyalanır ve doğrulanır.</p>
+          <div class="timeline"><span><span class="dot full"></span>FULL</span><span><span class="dot"></span>+52</span><span><span class="dot"></span>+18</span><span><span class="dot"></span>+347</span></div></div>
+        <div class="step"><h3 data-t="s3.h">Geri yükle</h3><p data-t="s3.p">Bir tarih seç. Klasörü o günkü haliyle geri yükle ya da tek bir ZIP dosyası olarak kaydet.</p></div>
+      </div>
+      <div class="pair" style="margin-top:24px">
+        <div class="shot"><div class="bar"><i></i><i></i><i></i></div><img data-img="running" src="img/running-tr.png" alt="" width="1620" height="1080" loading="lazy"></div>
+        <div class="shot"><div class="bar"><i></i><i></i><i></i></div><img data-img="history" src="img/history-tr.png" alt="" width="1620" height="1080" loading="lazy"></div>
+      </div>
+    </section>
+
+    <section id="faq">
+      <h2 data-t="q.title">Sık sorulan sorular</h2>
+      <p class="lead"></p>
+      <details><summary data-t="q1.q">bleen arka planda çalışır mı?</summary><p data-t="q1.a">Hayır. Pencere kapandığında bleen de kapanır. Otomatik yedeklemeyi açarsan Windows, bleen'i günde bir kez çalıştırır.</p></details>
+      <details><summary data-t="q2.q">Yedeklerimi bleen olmadan açabilir miyim?</summary><p data-t="q2.a">Evet. En yeni FULL dosyasını boş bir klasöre çıkar. Sonra her INCREMENTAL dosyası için, tarih sırasıyla: önce içindeki DELETED.txt dosyasında yazan dosyaları sil, sonra arşivi aynı klasöre çıkar ve dosyaların üzerine yaz. Tek bir dosya lazımsa onu bulunduğu ZIP dosyasından çıkarman yeterli.</p></details>
+      <details><summary data-t="q3.q">Hangi sistemlerde çalışır?</summary><p data-t="q3.a">Windows 10 ve 11, macOS ve Linux. Windows 7 ve 8.1 için ayrı bir sürüm vardır; bu sürüm WebView2 çalışma zamanı gerektirir. macOS ve Linux sürümleri henüz yeni; sorun görürsen bildir.</p></details>
+      <details><summary data-t="q4.q">Parolamı unutursam ne olur?</summary><p data-t="q4.a">Şifreli yedekler açılamaz. Parolayı kurtarmanın bir yolu yoktur; güvenli bir yerde sakla.</p></details>
+      <details><summary data-t="q5.q">Ücretli mi?</summary><p data-t="q5.a">bleen lisanslı bir yazılımdır ve her bilgisayar için bir lisans gerekir. 30 gün ücretsiz deneyebilirsin. Deneme bitse de lisans olmasa da yedeklerini geri yüklemek her zaman çalışır. bleen internete veri göndermez; lisans da internetsiz etkinleştirilir.</p></details>
+    </section>
+  </main>
+
+  <footer>
+    <img class="mascot" src="bleen-mascot.svg" alt=""><br>
+    <span data-t="footer">bleen · © 2026 Kaan Baha Sever</span>
+  </footer>
+</div>
+
+<script>
+const T = {
+  en: {
+    'nav.features': 'Features', 'nav.how': 'How it works', 'nav.faq': 'FAQ',
+    'hero.title': 'Easy <span class="b">backups</span>.',
+    'hero.sub': 'Backs up your folders to an external drive. Restores them as they were on any day.',
+    'cta.download': 'Download for Windows',
+    'cta.more': 'Windows 10/11 · <a href="https://github.com/kaanbahasever/bleen/releases/download/v0.3.0-beta.4/bleen-windows7-8-amd64.exe">Windows 7/8.1</a> · <a href="https://github.com/kaanbahasever/bleen/releases/download/v0.3.0-beta.4/bleen-macos-universal.zip">macOS</a> · <a href="https://github.com/kaanbahasever/bleen/releases/download/v0.3.0-beta.4/bleen-linux-amd64.tar.gz">Linux</a> · <a href="https://github.com/kaanbahasever/bleen/releases">All releases</a>',
+    'f.title': 'Features', 'f.lead': 'No installation, no account.',
+    'f1.h': 'Incremental backups', 'f1.p': 'The first backup copies every file. Later backups copy only new and changed files.',
+    'f2.h': 'Standard ZIP', 'f2.p': 'Backups are regular ZIP files. You can open them without bleen.',
+    'f3.h': 'Network folders', 'f3.p': 'Add network paths such as <code>\\\\SERVER\\Share</code> directly.',
+    'f4.h': 'Verification', 'f4.p': 'Every file is checked with SHA-256. A backup is saved only after it is verified.',
+    'f5.h': 'Encryption', 'f5.p': 'Optionally encrypts backups and file names with a password.',
+    'f6.h': 'No background process', 'f6.p': 'bleen runs only while it is open. Automatic backups are optional.',
+    'h.title': 'How it works', 'h.lead': 'Each backup creates one ZIP file. Only the latest version of each changed file is stored.',
+    's1.h': 'Choose a folder and a drive', 's1.p': 'Select the folder to back up and the drive to store the backups on.',
+    's2.h': 'Back up', 's2.p': 'bleen lists the changes. You confirm; the files are copied and verified.',
+    's3.h': 'Restore', 's3.p': 'Pick a date. Restore the folder as it was that day, or save it as one ZIP file.',
+    'q.title': 'FAQ',
+    'q1.q': 'Does bleen run in the background?', 'q1.a': 'No. bleen quits when you close its window. If you turn on automatic backups, Windows starts bleen once a day.',
+    'q2.q': 'Can I open my backups without bleen?', 'q2.a': 'Yes. Extract the newest FULL file into an empty folder. Then, for each INCREMENTAL file in date order: first delete the files listed in its DELETED.txt, then extract it into the same folder, replacing files. If you need just one file, extract it from the ZIP that holds it.',
+    'q3.q': 'Which systems are supported?', 'q3.a': 'Windows 10 and 11, macOS and Linux. A separate edition supports Windows 7 and 8.1; it requires the WebView2 runtime. The macOS and Linux apps are new; please report any problems.',
+    'q4.q': 'What if I forget my password?', 'q4.a': 'Encrypted backups cannot be opened. There is no way to recover the password, so keep it somewhere safe.',
+    'q5.q': 'Is it free?', 'q5.a': 'bleen is licensed software; each computer needs a license. You can try it free for 30 days. Restoring your backups always works, even without a license. bleen sends no data over the internet, and a license is activated offline.',
+    'footer': 'bleen · © 2026 Kaan Baha Sever',
+  },
+};
+const els = [...document.querySelectorAll('[data-t]')];
+const tr = Object.fromEntries(els.map((e) => [e.dataset.t, e.innerHTML]));
+function setLang(l) {
+  document.documentElement.lang = l;
+  for (const e of els) {
+    const v = l === 'tr' ? tr[e.dataset.t] : T.en[e.dataset.t];
+    if (v !== undefined) e.innerHTML = v;
+  }
+  for (const img of document.querySelectorAll('[data-img]')) img.src = `img/${img.dataset.img}-${l}.png`;
+  document.getElementById('lang').textContent = l === 'tr' ? 'EN' : 'TR';
+  document.title = l === 'tr' ? 'bleen · Kolay yedekleme' : 'bleen · Easy backups';
+  try { localStorage.setItem('lang', l); } catch {}
+}
+let lang = 'tr';
+try { lang = localStorage.getItem('lang') || (navigator.language.toLowerCase().startsWith('tr') ? 'tr' : 'en'); } catch {}
+if (lang !== 'tr') setLang(lang);
+document.getElementById('lang').onclick = () => setLang(document.documentElement.lang === 'tr' ? 'en' : 'tr');
+</script>
+</body>
+</html>
