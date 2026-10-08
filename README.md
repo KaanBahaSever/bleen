@@ -1,12 +1,11 @@
 # bleen
 
-Dated, verified backups of your folders, on a disk you own.
-Klasörlerinin tarihli, doğrulanmış yedekleri, senin diskinde.
+Verified, dated backups for office data. / Ofis verileri için tarihli, doğrulanmış yedekleme.
 
-**[Website / Web sitesi](https://kaanbahasever.github.io/bleen/) · [Downloads / İndirmeler](https://github.com/KaanBahaSever/bleen/releases)**
+**[kaanbahasever.github.io/bleen](https://kaanbahasever.github.io/bleen/)**
 
-This repository only hosts the website and the installers. bleen is proprietary software: a license per computer, with a 30-day trial. Restoring your backups never needs a license.
+bleen is in a **private beta**. Installers are sent to beta participants directly; there are no public downloads. This repository only hosts the website.
 
-Bu depo yalnızca web sitesini ve kurulum dosyalarını barındırır. bleen lisanslı bir yazılımdır: her bilgisayar için bir lisans, 30 günlük deneme. Yedeklerini geri yüklemek hiçbir zaman lisans gerektirmez.
+bleen şu anda **kapalı betada**. Kurulum dosyaları yalnızca beta katılımcılarına gönderilir; herkese açık indirme yoktur. Bu depo yalnızca web sitesini barındırır.
 
 © 2026 Kaan Baha Sever
